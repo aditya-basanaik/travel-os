@@ -1,0 +1,4 @@
+export const COVER_TOKYO = "https://images.unsplash.com/photo-1513407030348-c983a97b98d8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwxfHx0b2t5byUyMGNpdHklMjBuaWdodHxlbnwwfHx8fDE3ODYwMjU1OTJ8MA&ixlib=rb-4.1.0&q=85";
+export const COVER_PARIS = "https://images.unsplash.com/photo-1585944285854-d06c019aaca3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTF8MHwxfHNlYXJjaHwxfHxwYXJpcyUyMGNhZmUlMjBkYXl8ZW58MHx8fHwxNzg2MDI1NTkyfDA&ixlib=rb-4.1.0&q=85";
+export const COVER_BEACH = "https://images.unsplash.com/photo-1539367628448-4bc5c9d171c8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzOTB8MHwxfHNlYXJjaHwxfHxiZWF1dGlmdWwlMjBiZWFjaCUyMGJhbGl8ZW58MHx8fHwxNzg2MDI1NTkyfDA&ixlib=rb-4.1.0&q=85";
+export const MAP_TOPO = "https://images.unsplash.com/photo-1732783384071-0cdb7bbbad94?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwxfHxtYXAlMjB0b3BvZ3JhcGh5fGVufDB8fHx8MTc4NjAyNTU5Mnww&ixlib=rb-4.1.0&q=85";

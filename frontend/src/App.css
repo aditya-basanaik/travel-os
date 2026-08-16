@@ -1,0 +1,18 @@
+.App {
+    min-height: 100vh;
+}
+
+.tap-scale {
+    transition: transform 0.15s ease;
+}
+.tap-scale:active {
+    transform: scale(0.95);
+}
+
+.card-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08);
+}

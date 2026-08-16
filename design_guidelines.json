@@ -1,0 +1,146 @@
+{
+  "theme": {
+    "mode": "light",
+    "rationale": "Travel relies heavily on vibrant imagery (destinations, food, beaches) which pops best against a clean, bright canvas. We're using an 'Organic & Earthy' archetype to convey trust, relaxation, and grounded exploration."
+  },
+  "typography": {
+    "headings": {
+      "fontFamily": "Outfit, sans-serif",
+      "weights": ["400", "600", "800"],
+      "letterSpacing": "tracking-tight",
+      "instruction": "Do not use generic fonts for headings. Use Outfit for a modern, geometric yet friendly aesthetic."
+    },
+    "body": {
+      "fontFamily": "DM Sans, sans-serif",
+      "weights": ["400", "500", "700"],
+      "instruction": "Clean, highly readable humanist sans for dense data like itineraries and expenses."
+    },
+    "labels_overlines": {
+      "styles": "uppercase text-xs font-bold tracking-[0.2em] text-muted-foreground"
+    }
+  },
+  "colors": {
+    "archetype": "Organic & Earthy",
+    "primary": {
+      "DEFAULT": "#166534",
+      "foreground": "#ffffff",
+      "description": "Deep Forest Green for primary actions, buttons, and progress fills. Conveys growth and nature."
+    },
+    "secondary": {
+      "DEFAULT": "#F2F0E9",
+      "foreground": "#1A1A1A",
+      "description": "Warm sand / Bone-white for secondary surfaces, card backgrounds, and chips."
+    },
+    "accent": {
+      "DEFAULT": "#E27B58",
+      "foreground": "#ffffff",
+      "description": "Terracotta for highlighting important alerts, negative expenses, or 'hot' AI recommendations."
+    },
+    "background": "#FAFAFA",
+    "foreground": "#0A0A0A",
+    "surface": {
+      "glass": "bg-white/70 backdrop-blur-xl border border-white/40 shadow-sm",
+      "solid": "bg-[#F2F0E9] border border-black/5"
+    }
+  },
+  "layouts": {
+    "global": {
+      "mobile": "Sticky bottom navigation bar (Glassmorphism), main content has pb-24 to avoid clipping.",
+      "desktop": "Left sidebar navigation, max-width layout for main content to prevent over-stretching."
+    },
+    "grids": {
+      "trip_cards": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6",
+      "expense_dashboard": "grid grid-cols-1 md:grid-cols-3 gap-4"
+    },
+    "spacing": "Generous spacing. Use p-6 to p-8 inside cards. Map out sections with gap-8 or gap-12."
+  },
+  "visual_enhancers": {
+    "borders_and_radii": "Use rounded-3xl for large images/cards, rounded-full for buttons/chips. Never use sharp corners for this organic theme.",
+    "shadows": "Diffuse, soft shadows. shadow-[0_8px_30px_rgba(0,0,0,0.04)] for floating elements.",
+    "hero_overlays": "bg-gradient-to-t from-black/60 via-black/20 to-transparent. Ensures bottom text is readable while image breathes.",
+    "empty_states": "Use subtle topography/map illustrations and warm empty state messages instead of blank screens."
+  },
+  "components": {
+    "AI_Trip_Planner": {
+      "style": "Conversational or step-by-step form. Multi-select interests should be large, pill-shaped chips (bg-secondary text-foreground) that turn primary when selected. Smooth transitions on selection.",
+      "instruction": "Never use native HTML select. Use custom clickable div chips."
+    },
+    "Itinerary_Timeline": {
+      "style": "Vertical timeline feed. Left column: time/day label. Right column: Card with activity. Connect with a dashed vertical border-l-2.",
+      "instruction": "Use distinct icons for different activity types (fork for food, bed for hotel). Incorporate map links in the cards."
+    },
+    "Expense_Calculator": {
+      "style": "Dense, functional UI. Progress bar mapping total spent vs budget. Categories (Food, Stay, Transport) broken down with minimal horizontal bar charts.",
+      "instruction": "Use Shadcn Progress component. Provide offline fallback UI cues (e.g., 'Syncing...' badge)."
+    },
+    "Navigation": {
+      "style": "Mobile Bottom Nav: Glassmorphism base, primary icon colored when active. Desktop Sidebar: Clean solid background with generous padding.",
+      "instruction": "Bottom nav must float slightly off the bottom edge (mb-4) with rounded-full styling."
+    }
+  },
+  "motion": {
+    "hover": "Slight lift -translate-y-1, shadow increase, and color tint.",
+    "page_transitions": "Framer motion staggered fade-in for lists (like itineraries).",
+    "micro_interactions": "Scale button to 0.95 on tap/click."
+  },
+  "accessibility": {
+    "contrast": "Ensure white text on Forest Green meets APCA/WCAG ratios. Use text-shadow on hero images.",
+    "testing": "All interactive elements MUST include data-testid (e.g., 'create-trip-btn', 'expense-input', 'ai-planner-submit').",
+    "focus": "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+  },
+  "icons_and_assets": {
+    "library": "@phosphor-icons/react",
+    "instruction": "Use Duotone or Regular weights. They fit the premium, organic feel better than default icons."
+  },
+  "image_urls": {
+    "trip_covers": [
+      {
+        "url": "https://images.unsplash.com/photo-1513407030348-c983a97b98d8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwxfHx0b2t5byUyMGNpdHklMjBuaWdodHxlbnwwfHx8fDE3ODYwMjU1OTJ8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Tokyo city night - Ideal for Japan itinerary covers"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1585944285854-d06c019aaca3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTF8MHwxfHNlYXJjaHwxfHxwYXJpcyUyMGNhZmUlMjBkYXl8ZW58MHx8fHwxNzg2MDI1NTkyfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Paris cafe day - Ideal for Europe / Food itinerary covers"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1539367628448-4bc5c9d171c8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzOTB8MHwxfHNlYXJjaHwxfHxiZWF1dGlmdWwlMjBiZWFjaCUyMGJhbGl8ZW58MHx8fHwxNzg2MDI1NTkyfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Beautiful beach bali - Ideal for relaxation/nature trips"
+      }
+    ],
+    "user_profile": [
+      {
+        "url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxNzV8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc4NjAyNTU5Mnww&ixlib=rb-4.1.0&q=85",
+        "description": "User profile avatar"
+      }
+    ],
+    "placeholders": [
+      {
+        "url": "https://images.unsplash.com/photo-1732783384071-0cdb7bbbad94?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzJ8MHwxfHNlYXJjaHwxfHxtYXAlMjB0b3BvZ3JhcGh5fGVufDB8fHx8MTc4NjAyNTU5Mnww&ixlib=rb-4.1.0&q=85",
+        "description": "Map topography background placeholder for Map view when API key is missing"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Execute npm install / yarn add for required packages: framer-motion, @phosphor-icons/react, sonner.",
+    "Setup Tailwind config to include the custom colors (primary: #166534, secondary: #F2F0E9, accent: #E27B58) and fonts (Outfit, DM Sans).",
+    "Replace generic App.css centering with a responsive app shell layout: Bottom tab bar on mobile, Sidebar on Desktop.",
+    "Build Shadcn components (Button, Input, Progress, Dialog) but heavily override their default Vercel-like styles to match the 'Organic & Earthy' theme (rounder corners, warmer grays).",
+    "Construct the AI Trip Planner as a visually rich form, using large selectable pill chips for 'Interests' instead of standard dropdowns.",
+    "Implement the Itinerary timeline using flexbox or CSS grid with a continuous left border line to map out days.",
+    "Implement the Map tab using the placeholder topography image, centered with a 'Map API Key Required' blurred overlay message.",
+    "Use 'sonner' for all toast notifications (e.g., when expenses are saved offline/synced).",
+    "NEVER use generic placeholder text or empty dummy images. Use the provided Unsplash URLs.",
+    "Ensure every screen looks pristine on a 375px wide viewport (Mobile First)."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Do not use dark colors as gradients. Stick to solid colors or very subtle tonal shifts.",
+    "Avoid generic centered layouts. Use asymmetrical or balanced left-aligned layouts for readability.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur) for sticky navs and floating elements.",
+    "MUST NOT apply universal transition (transition: all). Use specific transitions.",
+    "MUST NOT center align the app container in App.css.",
+    "NEVER use AI assistant Emoji characters (like robot/brain) for icons. Use the Phosphor icon library.",
+    "Every interaction needs micro-animations - hover states, transitions.",
+    "Add data-testid attributes to all interactive elements for testing."
+  ]
+}
