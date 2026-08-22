@@ -34,6 +34,11 @@ logging.basicConfig(level=logging.INFO)
 IS_PROD = os.environ.get("ENV", "development") == "production"
 JWT_ALGORITHM = "HS256"
 JWT_SECRET = os.environ["JWT_SECRET"]
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ORIGINS", os.environ.get("FRONTEND_URL", "")).split(",")
+    if origin.strip()
+]
 
 PyObjectId = Annotated[str, BeforeValidator(lambda v: str(v) if isinstance(v, ObjectId) else str(v))]
 
@@ -105,6 +110,7 @@ class Expense(BaseDocument):
     category: str
     amount: float
     note: Optional[str] = None
+    client_id: Optional[str] = None
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -133,6 +139,10 @@ class LoginIn(BaseModel):
 
 class GoogleSessionIn(BaseModel):
     session_id: str
+
+
+class GoogleTokenIn(BaseModel):
+    id_token: str = Field(min_length=20)
 
 
 class ForgotIn(BaseModel):
@@ -184,6 +194,13 @@ class ExpenseIn(BaseModel):
     category: str
     amount: float = Field(gt=0)
     note: Optional[str] = Field(default=None, max_length=200)
+    client_id: Optional[str] = Field(default=None, min_length=8, max_length=100)
+
+
+class ExpenseUpdate(BaseModel):
+    category: Optional[str] = None
+    amount: Optional[float] = Field(default=None, gt=0)
+    note: Optional[str] = Field(default=None, max_length=200)
 
 
 class FavoriteIn(BaseModel):
@@ -191,6 +208,14 @@ class FavoriteIn(BaseModel):
     name: str
     external_id: Optional[str] = None
     meta: dict = {}
+
+
+class RAGQuestionIn(BaseModel):
+    question: str = Field(min_length=3, max_length=500)
+
+
+class RefineRequest(BaseModel):
+    instruction: str = Field(min_length=3, max_length=500)
 
 
 # ---------- Auth helpers ----------
@@ -322,6 +347,54 @@ async def google_session(body: GoogleSessionIn, response: Response):
     return res_data
 
 
+@api_router.post("/auth/google/token")
+async def google_token(body: GoogleTokenIn, response: Response):
+    try:
+        r = requests.get(
+            "https://oauth2.googleapis.com/tokeninfo",
+            params={"id_token": body.id_token},
+            timeout=10,
+        )
+    except requests.RequestException:
+        raise HTTPException(502, "Google sign-in is temporarily unavailable")
+    if r.status_code != 200:
+        raise HTTPException(401, "Invalid or expired Google token")
+
+    data = r.json()
+    configured_audiences = {
+        value.strip()
+        for value in os.environ.get("GOOGLE_OAUTH_CLIENT_IDS", "").split(",")
+        if value.strip()
+    }
+    if not configured_audiences or data.get("aud") not in configured_audiences:
+        raise HTTPException(401, "Google token audience is not configured")
+    if data.get("iss") not in ("accounts.google.com", "https://accounts.google.com"):
+        raise HTTPException(401, "Invalid Google token issuer")
+    if str(data.get("email_verified", "false")).lower() != "true":
+        raise HTTPException(401, "Google email is not verified")
+
+    email = data["email"].lower()
+    user = await db.users.find_one({"email": email})
+    if not user:
+        new_user = User(
+            name=data.get("name", email.split("@")[0]),
+            email=email,
+            auth_provider="google",
+            email_verified=True,
+            picture=data.get("picture"),
+        )
+        await db.users.insert_one(new_user.to_mongo())
+        await db.profiles.insert_one(Profile(user_id=new_user.id, photo_url=data.get("picture")).to_mongo())
+        user = new_user.to_mongo()
+    access_token = create_access_token(user["_id"], email)
+    refresh_token = create_refresh_token(user["_id"])
+    set_auth_cookies(response, user["_id"], email)
+    res_data = public_user(user)
+    res_data["access_token"] = access_token
+    res_data["refresh_token"] = refresh_token
+    return res_data
+
+
 @api_router.post("/auth/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
@@ -390,6 +463,79 @@ async def reset_password(body: ResetIn):
 
 # ---------- Profile ----------
 
+def load_rag_documents() -> list[dict]:
+    with Path(__file__).with_name("knowledge_base.json").open(encoding="utf-8") as file:
+        documents = json.load(file)
+    for document in documents:
+        document["keywords"] = set(document.get("keywords", []))
+    return documents
+
+
+RAG_DOCUMENTS = load_rag_documents()
+
+
+def rag_tokens(text: str) -> set[str]:
+    return {token for token in re.findall(r"[a-z0-9-]+", text.lower()) if len(token) > 2}
+
+
+def retrieve_rag_documents(question: str, limit: int = 3) -> list[dict]:
+    tokens = rag_tokens(question)
+    ranked = []
+    for document in RAG_DOCUMENTS:
+        score = len(tokens & document["keywords"])
+        if score:
+            ranked.append((score, document))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return [document for _, document in ranked[:limit]]
+
+
+def grounded_rag_fallback(documents: list[dict]) -> str:
+    return " ".join(document["content"] for document in documents)
+
+
+async def call_rag_llm(question: str, documents: list[dict]) -> str:
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone  # pyright: ignore[reportMissingImports]
+    context = "\n\n".join(f"[{document['title']}]\n{document['content']}" for document in documents)
+    chat = LlmChat(
+        api_key=os.environ["EMERGENT_LLM_KEY"],
+        session_id=f"rag-{uuid.uuid4()}",
+        system_message=(
+            "You are the Travel OS product help assistant. Answer only from the supplied Travel OS documents. "
+            "Do not invent policies, capabilities, prices, live availability, or guarantees. If the documents do not answer the question, "
+            "say that you do not have enough information. Keep the answer concise and practical."
+        ),
+    ).with_model("anthropic", "claude-sonnet-4-6")
+    chunks = []
+    prompt = f"Travel OS documents:\n{context}\n\nUser question: {question}"
+    async for event in chat.stream_message(UserMessage(text=prompt)):
+        if isinstance(event, TextDelta):
+            chunks.append(event.content)
+        elif isinstance(event, StreamDone):
+            break
+    return "".join(chunks).strip()
+
+
+@api_router.post("/rag/ask")
+async def ask_rag(body: RAGQuestionIn, user: dict = Depends(get_current_user)):
+    documents = retrieve_rag_documents(body.question)
+    if not documents:
+        return {
+            "answer": "I do not have enough information in the Travel OS help documents to answer that.",
+            "sources": [],
+        }
+
+    answer = None
+    if os.environ.get("EMERGENT_LLM_KEY"):
+        try:
+            answer = await asyncio.wait_for(call_rag_llm(body.question, documents), timeout=60)
+        except Exception as error:
+            logger.warning(f"RAG response failed; using grounded fallback: {error}")
+    answer = answer or grounded_rag_fallback(documents)
+    return {
+        "answer": answer,
+        "sources": [{"id": document["id"], "title": document["title"]} for document in documents],
+    }
+
 @api_router.get("/profile")
 async def get_profile(user: dict = Depends(get_current_user)):
     profile = await db.profiles.find_one({"user_id": user["_id"]})
@@ -433,6 +579,60 @@ def pick_cover(destination: str) -> str:
     if any(k in d for k in ["paris", "france", "europe", "london", "rome", "cafe"]):
         return COVERS["paris"]
     return COVERS["beach"]
+
+
+def build_activity_image_candidates(title: str, location: str, destination: str, activity_type: str | None) -> list[str]:
+    destination = (destination or "").strip()
+    location = (location or "").strip()
+    title = (title or "").strip()
+    activity_type = (activity_type or "activity").lower()
+    generic_titles = {"breakfast and check-in", "lunch break", "dinner and evening stroll", "main attraction visit", "market or neighborhood walk", "sunrise or early city walk"}
+
+    parts = [p.strip() for p in re.split(r"[,;/]", location or destination) if p.strip()]
+    if not parts and destination:
+        parts = [destination]
+
+    type_map = {
+        "food": ["restaurant", "local food", "cafe", "street food"],
+        "stay": ["hotel", "resort", "stay"],
+        "transport": ["train station", "airport", "local transit"],
+        "nature": ["scenic viewpoint", "nature landscape", "waterfall", "beach"],
+        "nightlife": ["night market", "city nightlife", "bar street"],
+        "culture": ["museum", "heritage site", "temple", "landmark"],
+        "relaxation": ["beach", "park", "spa", "viewpoint"],
+        "adventure": ["hiking trail", "adventure activity", "kayaking", "outdoor view"],
+    }
+
+    candidates: list[str] = []
+    if title and title.lower() not in generic_titles:
+        if location:
+            candidates.extend([f"{title} in {location}", f"{location} {title}", f"{title} {location}"]) 
+        if destination:
+            candidates.extend([f"{title} in {destination}", f"{destination} {title}", f"{title} {destination}"])
+    else:
+        keywords = type_map.get(activity_type, ["attraction", "landmark", "city view"])
+        for place in parts or [destination]:
+            for kw in keywords:
+                candidates.extend([
+                    f"{kw} in {place}",
+                    f"{place} {kw}",
+                    f"{place} {kw} view",
+                    f"{place} skyline",
+                ])
+
+    if destination and activity_type:
+        candidates.append(f"{destination} {activity_type} destination")
+        candidates.append(f"{destination} skyline")
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in candidates:
+        clean = " ".join(item.split())
+        key = clean.lower()
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(clean)
+    return deduped[:14]
 
 
 def get_activity_image(query: str, cache: dict | None = None, used: set | None = None) -> str:
@@ -748,32 +948,8 @@ Rules:
                 # If no locality image found, try richer queries combining title, type and tokens
                 if not img_url:
                     tried = set()
-                    # prepare candidate queries
-                    candidates = []
-                    # if title is specific, prefer title+token combinations
-                    if low_title not in GENERIC_TITLES and len(title) >= 4:
-                        for tkn in (parts if parts else [primary_q]):
-                            candidates.append(f"{title} in {tkn}")
-                            candidates.append(f"{title} {tkn}")
-                    else:
-                        # map activity type to likely search keywords
-                        type_map = {
-                            "food": ["restaurant", "local food", "cafe"],
-                            "adventure": ["hiking", "outdoor adventure", "rafting"],
-                            "culture": ["museum", "temple", "cultural site"],
-                            "relaxation": ["park", "beach", "spa"],
-                            "nature": ["waterfall", "landscape", "scenic"],
-                            "nightlife": ["city nightlife", "bars", "night market"],
-                            "activity": ["attraction", "landmark", "sightseeing"],
-                            "stay": ["hotel", "resort"],
-                        }
-                        kws = type_map.get(a.get("type"), ["attraction", "landmark"]) if a.get("type") else ["attraction"]
-                        for tkn in (parts if parts else [primary_q]):
-                            for kw in kws:
-                                candidates.append(f"{kw} in {tkn}")
-                                candidates.append(f"{kw} {tkn}")
+                    candidates = build_activity_image_candidates(title, location, dest, a.get("type"))
 
-                    # finally add a general combined fallback
                     parts_full = [title, location, dest]
                     combined = " ".join([p for p in parts_full if p]).strip()
                     if combined:
@@ -794,12 +970,11 @@ Rules:
                             continue
 
                 chosen = img_url or pick_cover(body.destination)
-                # DEBUG: log query and chosen image for troubleshooting
+                # Debug logs intentionally kept concise to aid troubleshooting without flooding the server logs.
                 try:
-                    print(f"DEBUG image selection: title={title!r} location={location!r} dest={dest!r} img_url={img_url!r} chosen(before rotate)={chosen!r}")
+                    print(f"DEBUG image selection: title={title!r} location={location!r} dest={dest!r} img_url={img_url!r} chosen={chosen!r}")
                 except Exception:
                     pass
-                # If the chosen image is a generic COVER, try to rotate through other covers to avoid identical thumbnails
                 if chosen in COVERS.values():
                     for alt in COVERS.values():
                         if alt not in _used_imgs:
@@ -841,6 +1016,57 @@ Rules:
     return result
 
 
+def local_refine_itinerary(itinerary: dict, instruction: str) -> dict:
+    refined = json.loads(json.dumps(itinerary))
+    request = instruction.lower()
+    if any(word in request for word in ("cheaper", "cheapest", "budget")):
+        for day in refined.get("days", []):
+            day["estimated_cost"] = round(float(day.get("estimated_cost", 0)) * 0.85, 2)
+            for activity in day.get("activities", []):
+                activity["estimated_cost"] = round(float(activity.get("estimated_cost", 0)) * 0.85, 2)
+        breakdown = refined.get("cost_breakdown", {})
+        refined["cost_breakdown"] = {key: round(float(value) * 0.85, 2) for key, value in breakdown.items()}
+        refined.setdefault("tips", []).append("Choose local transport and flexible meal options to protect the budget.")
+    if "adventure" in request:
+        for day in refined.get("days", []):
+            for activity in day.get("activities", []):
+                if activity.get("type") in ("activity", "nature"):
+                    activity["type"] = "adventure"
+                    break
+    if any(word in request for word in ("family", "family-friendly", "family friendly")):
+        for day in refined.get("days", []):
+            day["activities"] = [activity for activity in day.get("activities", []) if activity.get("type") != "nightlife"]
+    if any(word in request for word in ("peaceful", "relaxing", "relaxation")):
+        for day in refined.get("days", []):
+            for activity in day.get("activities", []):
+                if activity.get("type") in ("activity", "nightlife"):
+                    activity["type"] = "relaxation"
+    return refined
+
+
+@api_router.post("/trips/{trip_id}/refine")
+async def refine_trip(trip_id: str, body: RefineRequest, user: dict = Depends(get_current_user)):
+    trip = await get_owned_trip(trip_id, user)
+    itinerary = trip.get("itinerary") or {}
+    if not isinstance(itinerary.get("days"), list) or not itinerary["days"]:
+        raise HTTPException(400, "Trip does not contain a refinable itinerary")
+
+    prompt = f"""Refine this existing Travel OS itinerary according to the user's instruction.
+User instruction: {body.instruction}
+Return only valid JSON. Preserve the existing schema and day dates. Do not invent booking confirmations.
+Existing itinerary:
+{json.dumps(itinerary, ensure_ascii=False)}"""
+    refined = None
+    if os.environ.get("EMERGENT_LLM_KEY"):
+        try:
+            refined = parse_itinerary_json(await asyncio.wait_for(call_llm(prompt), timeout=180))
+        except Exception as error:
+            logger.warning(f"AI refinement failed; using local refinement: {error}")
+    refined = refined or local_refine_itinerary(itinerary, body.instruction)
+    await db.trips.update_one({"_id": trip_id}, {"$set": {"itinerary": refined, "updated_at": utcnow()}})
+    return trip_out(await db.trips.find_one({"_id": trip_id}))
+
+
 # ---------- Trips ----------
 
 async def get_owned_trip(trip_id: str, user: dict) -> dict:
@@ -863,6 +1089,14 @@ async def list_trips(user: dict = Depends(get_current_user), page: int = Query(1
     cursor = db.trips.find(q).sort("created_at", -1).skip((page - 1) * limit).limit(limit)
     items = [trip_out(t) async for t in cursor]
     return {"items": items, "total": total, "page": page, "limit": limit}
+
+
+@api_router.get("/trips/deleted")
+async def list_deleted_trips(user: dict = Depends(get_current_user)):
+    cutoff = utcnow() - timedelta(days=30)
+    cursor = db.trips.find({"user_id": user["_id"], "deleted_at": {"$ne": None, "$gte": cutoff}}).sort("deleted_at", -1)
+    items = [trip_out(trip) async for trip in cursor]
+    return {"items": items}
 
 
 @api_router.get("/trips/shared/{token}")
@@ -993,6 +1227,17 @@ async def delete_trip(trip_id: str, user: dict = Depends(get_current_user)):
     return {"message": "Trip deleted. It can be restored within 30 days."}
 
 
+@api_router.post("/trips/{trip_id}/restore")
+async def restore_trip(trip_id: str, user: dict = Depends(get_current_user)):
+    trip = await db.trips.find_one({"_id": trip_id, "user_id": user["_id"]})
+    if not trip or not trip.get("deleted_at"):
+        raise HTTPException(404, "Deleted trip not found")
+    if utcnow() - trip["deleted_at"] > timedelta(days=30):
+        raise HTTPException(410, "Trip restore window has expired")
+    await db.trips.update_one({"_id": trip_id, "user_id": user["_id"]}, {"$set": {"deleted_at": None, "updated_at": utcnow()}})
+    return trip_out(await db.trips.find_one({"_id": trip_id, "user_id": user["_id"]}))
+
+
 @api_router.post("/trips/{trip_id}/duplicate")
 async def duplicate_trip(trip_id: str, user: dict = Depends(get_current_user)):
     src = await get_owned_trip(trip_id, user)
@@ -1067,6 +1312,11 @@ async def add_expense(trip_id: str, body: ExpenseIn, user: dict = Depends(get_cu
     await get_owned_trip(trip_id, user)
     if body.category not in EXPENSE_CATEGORIES:
         raise HTTPException(400, f"Category must be one of {EXPENSE_CATEGORIES}")
+    if body.client_id:
+        existing = await db.expenses.find_one({"trip_id": trip_id, "user_id": user["_id"], "client_id": body.client_id})
+        if existing:
+            existing["id"] = str(existing.pop("_id"))
+            return existing
     exp = Expense(trip_id=trip_id, user_id=user["_id"], **body.model_dump())
     await db.expenses.insert_one(exp.to_mongo())
     return exp.model_dump()
@@ -1078,6 +1328,21 @@ async def delete_expense(expense_id: str, user: dict = Depends(get_current_user)
     if res.deleted_count == 0:
         raise HTTPException(404, "Expense not found")
     return {"message": "Expense deleted"}
+
+
+@api_router.put("/expenses/{expense_id}")
+async def update_expense(expense_id: str, body: ExpenseUpdate, user: dict = Depends(get_current_user)):
+    data = {key: value for key, value in body.model_dump().items() if value is not None}
+    if "category" in data and data["category"] not in EXPENSE_CATEGORIES:
+        raise HTTPException(400, f"Category must be one of {EXPENSE_CATEGORIES}")
+    if not data:
+        raise HTTPException(400, "At least one expense field is required")
+    result = await db.expenses.update_one({"_id": expense_id, "user_id": user["_id"]}, {"$set": data})
+    if result.matched_count == 0:
+        raise HTTPException(404, "Expense not found")
+    updated = await db.expenses.find_one({"_id": expense_id, "user_id": user["_id"]})
+    updated["id"] = str(updated.pop("_id"))
+    return updated
 
 
 @api_router.get("/trips/{trip_id}/expenses/summary")
@@ -1117,7 +1382,7 @@ else:
     app.add_middleware(
         CORSMiddleware,
         allow_credentials=True,
-        allow_origins=origins or ["http://localhost:3000"],
+        allow_origins=CORS_ORIGINS or ["http://localhost:3000"],
         allow_methods=["*"],
         allow_headers=["*"],
     )

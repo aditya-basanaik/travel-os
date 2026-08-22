@@ -203,6 +203,17 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
                           ],
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () {
+                          final token = Uri.tryParse(_devResetLink!)
+                              ?.queryParameters['token'];
+                          if (token != null && token.isNotEmpty) {
+                            context.push('/reset-password?token=$token');
+                          }
+                        },
+                        child: const Text('Open Reset Form'),
+                      ),
                     ],
                     const SizedBox(height: 32),
                     ElevatedButton(

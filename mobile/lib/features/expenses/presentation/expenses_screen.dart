@@ -113,6 +113,86 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     );
   }
 
+  void _showEditExpenseModal(Expense expense) {
+    final amountController = TextEditingController(text: expense.amount.toString());
+    final noteController = TextEditingController(text: expense.note ?? '');
+    String category = expense.category;
+    final categories = ['food', 'stay', 'transport', 'activities', 'misc'];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 24,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Edit Expense', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 20)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Amount (₹)'),
+              ),
+              const SizedBox(height: 16),
+              Text('Category', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                children: categories.map((cat) {
+                  final selected = category == cat;
+                  return ChoiceChip(
+                    label: Text(cat.toUpperCase()),
+                    selected: selected,
+                    selectedColor: AppTheme.primary,
+                    backgroundColor: AppTheme.secondary,
+                    labelStyle: GoogleFonts.dmSans(
+                      color: selected ? Colors.white : AppTheme.foreground,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                    ),
+                    onSelected: (_) => setModalState(() => category = cat),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: noteController,
+                decoration: const InputDecoration(labelText: 'Note (Optional)'),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () async {
+                  final amount = double.tryParse(amountController.text);
+                  if (amount == null || amount <= 0) return;
+                  Navigator.pop(context);
+                  await ref.read(expensesRepositoryPrv).updateExpense(
+                    expense: expense,
+                    category: category,
+                    amount: amount,
+                    note: noteController.text.trim(),
+                  );
+                },
+                child: const Text('Save Changes'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tripsAsync = ref.watch(userTripsPrv);
@@ -320,6 +400,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                                   Text(
                                     '${currentTrip.currency}${exp.amount.toStringAsFixed(0)}',
                                     style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.foreground),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_outlined, size: 18, color: AppTheme.mutedText),
+                                    tooltip: 'Edit expense',
+                                    onPressed: () => _showEditExpenseModal(exp),
                                   ),
                                   IconButton(
                                     icon: const Icon(Icons.delete_outline_rounded, size: 18, color: AppTheme.mutedText),

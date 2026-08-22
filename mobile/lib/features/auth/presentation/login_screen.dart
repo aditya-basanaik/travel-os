@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:travel_os/core/theme/app_theme.dart';
 import 'package:travel_os/features/auth/data/auth_repository.dart';
 
@@ -49,60 +52,53 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
-  void _showGoogleSessionDialog() {
-    final sessionController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: Colors.white,
-        title: Text(
-          'Google Auth Session',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Enter the session ID from the web Google login to authenticate:',
-              style: GoogleFonts.dmSans(fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: sessionController,
-              decoration: const InputDecoration(
-                hintText: 'Session ID',
-                prefixIcon: Icon(Icons.token_outlined),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: GoogleFonts.dmSans(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final sessionId = sessionController.text.trim();
-              Navigator.pop(context);
-              if (sessionId.isNotEmpty) {
-                setState(() => _isLoading = true);
-                final error = await ref.read(authRepositoryPrv).loginWithGoogleSession(sessionId);
-                if (mounted) {
-                  setState(() {
-                    _isLoading = false;
-                    _errorMessage = error;
-                  });
-                }
-              }
-            },
-            child: const Text('Connect'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _loginWithGoogle() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      if (!kIsWeb) {
+        final googleSignIn = GoogleSignIn(
+          scopes: const ['email', 'profile'],
+          serverClientId: const String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID'),
+        );
+        final account = await googleSignIn.signIn();
+        if (account == null) return;
+        final authentication = await account.authentication;
+        final idToken = authentication.idToken;
+        if (idToken == null || idToken.isEmpty) {
+          throw Exception('Google did not return an ID token.');
+        }
+        final error = await ref.read(authRepositoryPrv).loginWithGoogleToken(idToken);
+        if (mounted) setState(() => _errorMessage = error);
+        return;
+      }
+      final redirect = Uri.parse('travelos://auth/callback');
+      final authUrl = Uri.https(
+        'auth.emergentagent.com',
+        '/',
+        {'redirect': redirect.toString()},
+      );
+      final callback = await FlutterWebAuth2.authenticate(
+        url: authUrl.toString(),
+        callbackUrlScheme: redirect.scheme,
+      );
+      final sessionId = Uri.parse(callback).fragment.isEmpty
+          ? null
+          : Uri.splitQueryString(Uri.parse(callback).fragment)['session_id'];
+      if (sessionId == null || sessionId.isEmpty) {
+        throw Exception('Google sign-in did not return a session.');
+      }
+      final error = await ref.read(authRepositoryPrv).loginWithGoogleSession(sessionId);
+      if (mounted) setState(() => _errorMessage = error);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _errorMessage = 'Google sign-in was cancelled or failed.');
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -315,7 +311,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                   // Google login button
                   OutlinedButton(
-                    onPressed: _isLoading ? null : _showGoogleSessionDialog,
+                    onPressed: _isLoading ? null : _loginWithGoogle,
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: const StadiumBorder(),
@@ -326,11 +322,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Image.network(
-                          'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1024px-Google_%22G%22_logo.svg.png',
-                          height: 20,
-                          width: 20,
-                          errorBuilder: (context, _, __) => const Icon(Icons.g_mobiledata),
+                        const Text(
+                          'G',
+                          style: TextStyle(
+                            color: Color(0xFF4285F4),
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Text(
@@ -346,8 +344,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 32),
 
                   // Toggle screen view
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    runSpacing: 4,
                     children: [
                       Text(
                         "Don't have an account? ",

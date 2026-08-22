@@ -1,15 +1,17 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:travel_os/features/auth/presentation/login_screen.dart';
 import 'package:travel_os/features/auth/presentation/register_screen.dart';
 import 'package:travel_os/features/auth/presentation/forgot_password_screen.dart';
+import 'package:travel_os/features/auth/presentation/reset_password_screen.dart';
 import 'package:travel_os/features/home/presentation/home_screen.dart';
 import 'package:travel_os/features/trips/presentation/trips_screen.dart';
 import 'package:travel_os/features/trips/presentation/trip_detail_screen.dart';
+import 'package:travel_os/features/trips/presentation/shared_trip_screen.dart';
 import 'package:travel_os/features/ai_planner/presentation/ai_planner_screen.dart';
 import 'package:travel_os/features/expenses/presentation/expenses_screen.dart';
 import 'package:travel_os/features/profile/presentation/profile_screen.dart';
+import 'package:travel_os/features/help/presentation/help_screen.dart';
 import 'package:travel_os/shared/widgets/glass_bottom_nav.dart';
 import 'package:travel_os/features/auth/data/auth_repository.dart';
 
@@ -21,11 +23,13 @@ final appRouterPrv = Provider<GoRouter>((ref) {
     refreshListenable: authState,
     redirect: (context, state) {
       final isLoggedIn = authState.isAuthenticated;
-      final isLoggingIn = state.matchedLocation == '/login' ||
+      final isPublicRoute = state.matchedLocation == '/login' ||
           state.matchedLocation == '/register' ||
-          state.matchedLocation == '/forgot-password';
+          state.matchedLocation == '/forgot-password' ||
+          state.matchedLocation == '/reset-password' ||
+          state.matchedLocation.startsWith('/shared/');
 
-      if (!isLoggedIn && !isLoggingIn) {
+      if (!isLoggedIn && !isPublicRoute) {
         return '/login';
       }
       if (isLoggedIn && isLoggingIn) {
@@ -46,7 +50,20 @@ final appRouterPrv = Provider<GoRouter>((ref) {
         path: '/forgot-password',
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
-      
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) => ResetPasswordScreen(
+          token: state.uri.queryParameters['token'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/shared/:token',
+        builder: (context, state) {
+          final token = state.pathParameters['token'] ?? '';
+          return SharedTripScreen(token: token);
+        },
+      ),
+
       // Bottom Nav Shell Routes
       ShellRoute(
         builder: (context, state, child) {
@@ -81,6 +98,10 @@ final appRouterPrv = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/profile',
             builder: (context, state) => const ProfileScreen(),
+          ),
+          GoRoute(
+            path: '/help',
+            builder: (context, state) => const HelpScreen(),
           ),
         ],
       ),

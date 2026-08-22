@@ -21,6 +21,8 @@ class MainNavigationShell extends StatelessWidget {
       return 3;
     } else if (location.startsWith('/profile')) {
       return 4;
+    } else if (location.startsWith('/help')) {
+      return 5;
     }
     return 0; // default '/' (Home)
   }
@@ -41,6 +43,9 @@ class MainNavigationShell extends StatelessWidget {
         break;
       case 4:
         context.go('/profile');
+        break;
+      case 5:
+        context.go('/help');
         break;
     }
   }
@@ -123,6 +128,14 @@ class MainNavigationShell extends StatelessWidget {
                           activeIcon: Icons.person_rounded,
                           label: 'Profile',
                           isSelected: selectedIndex == 4,
+                          context: context,
+                        ),
+                        _buildNavItem(
+                          index: 5,
+                          icon: Icons.help_outline_rounded,
+                          activeIcon: Icons.help_rounded,
+                          label: 'Help',
+                          isSelected: selectedIndex == 5,
                           context: context,
                         ),
                       ],

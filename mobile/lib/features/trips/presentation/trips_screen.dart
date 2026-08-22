@@ -30,13 +30,13 @@ class TripsScreen extends ConsumerWidget {
           color: AppTheme.primary,
           child: tripsAsync.when(
             data: (trips) {
-              if (trips.isEmpty) {
-                return _buildEmptyState(context);
-              }
               return ListView.builder(
                 padding: const EdgeInsets.only(left: 20, right: 20, bottom: 120, top: 10),
-                itemCount: trips.length,
+                itemCount: trips.length + 1,
                 itemBuilder: (context, idx) {
+                  if (idx == trips.length) {
+                    return _buildDeletedTripsSection(context, ref);
+                  }
                   final trip = trips[idx];
                   return _buildTripRowCard(context, ref, trip);
                 },
@@ -218,7 +218,7 @@ class TripsScreen extends ConsumerWidget {
         } else if (value == 'share') {
           final token = await ref.read(tripsRepositoryPrv).shareTrip(trip.id);
           if (token != null) {
-            final shareUrl = '${ApiClient.baseUrl}/trips/shared/$token';
+            final shareUrl = '${ApiClient.webAppUrl}/shared/$token';
             showDialog(
               context: context,
               builder: (context) => AlertDialog(
@@ -285,6 +285,65 @@ class TripsScreen extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildDeletedTripsSection(BuildContext context, WidgetRef ref) {
+    return FutureBuilder<List<Trip>>(
+      future: ref.read(tripsRepositoryPrv).getDeletedTrips(),
+      builder: (context, snapshot) {
+        final deletedTrips = snapshot.data ?? [];
+        if (snapshot.connectionState == ConnectionState.waiting && deletedTrips.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator(color: AppTheme.primary)),
+          );
+        }
+        if (deletedTrips.isEmpty) {
+          return _buildEmptyState(context);
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 24),
+            Text(
+              'Recently Deleted',
+              style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Restore trips within 30 days.',
+              style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.mutedText),
+            ),
+            const SizedBox(height: 8),
+            ...deletedTrips.map((trip) => Card(
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  child: ListTile(
+                    title: Text(trip.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(trip.destination),
+                    trailing: TextButton(
+                      onPressed: () async {
+                        final restored = await ref.read(tripsRepositoryPrv).restoreTrip(trip.id);
+                        if (!context.mounted) return;
+                        if (restored) {
+                          ref.invalidate(userTripsPrv);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Trip restored successfully.')),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Could not restore this trip.')),
+                          );
+                        }
+                      },
+                      child: const Text('Restore'),
+                    ),
+                  ),
+                )),
+          ],
+        );
+      },
     );
   }
 

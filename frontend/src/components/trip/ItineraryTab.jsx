@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { ForkKnife, Bed, Car, Compass, Mountains, Martini, Bank, Island, Parachute, MapPin, PencilSimple, Check, Plus, X } from "@phosphor-icons/react";
+import { ForkKnife, Bed, Car, Compass, Mountains, Martini, Bank, Island, Parachute, MapPin, PencilSimple, Check, Plus, X, Sparkle } from "@phosphor-icons/react";
 import api, { fmtErr } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { COVER_BEACH } from "@/lib/images";
@@ -34,6 +34,8 @@ export default function ItineraryTab({ trip, onUpdate }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [refining, setRefining] = useState(false);
+  const [refineInstruction, setRefineInstruction] = useState("");
   const [weather, setWeather] = useState({});
   const it = editing ? draft : (trip.itinerary || {});
   const days = it.days || [];
@@ -61,6 +63,18 @@ export default function ItineraryTab({ trip, onUpdate }) {
       toast.success("Itinerary updated");
     } catch (e) { toast.error(fmtErr(e)); }
     finally { setSaving(false); }
+  };
+
+  const refine = async (instruction = refineInstruction) => {
+    if (!instruction.trim() || refining) return;
+    setRefining(true);
+    try {
+      const { data } = await api.post(`/trips/${trip.id}/refine`, { instruction: instruction.trim() });
+      onUpdate(data);
+      setRefineInstruction("");
+      toast.success("Itinerary refined");
+    } catch (e) { toast.error(fmtErr(e)); }
+    finally { setRefining(false); }
   };
 
   const setAct = (di, ai, key, val) => {
@@ -102,11 +116,36 @@ export default function ItineraryTab({ trip, onUpdate }) {
             </Button>
           </div>
         ) : (
-          <Button variant="outline" onClick={startEdit} data-testid="itinerary-edit-btn" className="rounded-full tap-scale">
-            <PencilSimple size={16} className="mr-1" /> Edit itinerary
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={startEdit} data-testid="itinerary-edit-btn" className="rounded-full tap-scale">
+              <PencilSimple size={16} className="mr-1" /> Edit itinerary
+            </Button>
+            <Button onClick={() => refine("Make it cheaper") } disabled={refining} data-testid="itinerary-refine-cheaper" className="rounded-full bg-primary text-white tap-scale">
+              <Sparkle size={16} weight="fill" className="mr-1" /> {refining ? "Refining…" : "Make it cheaper"}
+            </Button>
+          </div>
         )}
       </div>
+
+      {!editing && (
+        <div className="bg-secondary/60 rounded-3xl p-4 mb-8" data-testid="itinerary-refine-panel">
+          <p className="text-sm font-bold mb-2">Refine this itinerary</p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              value={refineInstruction}
+              onChange={(e) => setRefineInstruction(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") refine(); }}
+              placeholder="Add more adventure, make it family friendly…"
+              maxLength={500}
+              data-testid="itinerary-refine-input"
+              className="flex-1 h-11 rounded-full border border-input bg-white px-4 text-sm"
+            />
+            <Button onClick={() => refine()} disabled={refining || !refineInstruction.trim()} data-testid="itinerary-refine-submit" className="rounded-full bg-primary text-white tap-scale">
+              <Sparkle size={16} weight="fill" className="mr-1" /> Refine
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-10">
         {days.map((day, di) => (

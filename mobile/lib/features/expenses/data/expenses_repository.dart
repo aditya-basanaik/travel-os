@@ -14,6 +14,7 @@ class Expense {
   final String? note;
   final String createdAt;
   final bool isPendingSync;
+  final String? clientId;
 
   Expense({
     required this.id,
@@ -24,6 +25,7 @@ class Expense {
     this.note,
     required this.createdAt,
     this.isPendingSync = false,
+    this.clientId,
   });
 
   factory Expense.fromJson(Map<String, dynamic> json) {
@@ -36,6 +38,7 @@ class Expense {
       note: json['note'],
       createdAt: json['created_at'] ?? '',
       isPendingSync: json['is_pending_sync'] ?? false,
+      clientId: json['client_id'],
     );
   }
 
@@ -49,7 +52,22 @@ class Expense {
       'note': note,
       'created_at': createdAt,
       'is_pending_sync': isPendingSync,
+      'client_id': clientId,
     };
+  }
+
+  Expense copyWith({String? category, double? amount, String? note}) {
+    return Expense(
+      id: id,
+      tripId: tripId,
+      userId: userId,
+      category: category ?? this.category,
+      amount: amount ?? this.amount,
+      note: note ?? this.note,
+      createdAt: createdAt,
+      isPendingSync: isPendingSync,
+      clientId: clientId,
+    );
   }
 }
 
@@ -133,7 +151,7 @@ class ExpensesRepository extends ChangeNotifier {
     try {
       final response = await _dio.post(
         '/trips/$tripId/expenses',
-        data: {'category': category, 'amount': amount, 'note': note},
+        data: {'category': category, 'amount': amount, 'note': note, 'client_id': 'mobile_${DateTime.now().microsecondsSinceEpoch}'},
       );
       if (response.statusCode == 200) {
         notifyListeners();
@@ -151,6 +169,7 @@ class ExpensesRepository extends ChangeNotifier {
         note: note,
         createdAt: DateTime.now().toIso8601String(),
         isPendingSync: true,
+        clientId: 'mobile_${DateTime.now().microsecondsSinceEpoch}',
       );
       await _addToOfflineQueue(localItem);
       notifyListeners();
@@ -179,6 +198,38 @@ class ExpensesRepository extends ChangeNotifier {
     return false;
   }
 
+  Future<bool> updateExpense({
+    required Expense expense,
+    required String category,
+    required double amount,
+    String? note,
+  }) async {
+    final updated = expense.copyWith(category: category, amount: amount, note: note);
+    if (expense.id.startsWith('local_')) {
+      final queue = await _loadOfflineQueue();
+      final index = queue.indexWhere((item) => item.id == expense.id);
+      if (index == -1) return false;
+      queue[index] = updated;
+      await _saveOfflineQueue(queue);
+      notifyListeners();
+      return true;
+    }
+
+    try {
+      final response = await _dio.put(
+        '/expenses/${expense.id}',
+        data: {'category': category, 'amount': amount, 'note': note},
+      );
+      if (response.statusCode == 200) {
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      debugPrint('Error updating expense: $e');
+    }
+    return false;
+  }
+
   Future<void> syncOfflineQueue() async {
     final queue = await _loadOfflineQueue();
     if (queue.isEmpty) return;
@@ -188,7 +239,7 @@ class ExpensesRepository extends ChangeNotifier {
       try {
         final res = await _dio.post(
           '/trips/${exp.tripId}/expenses',
-          data: {'category': exp.category, 'amount': exp.amount, 'note': exp.note},
+          data: {'category': exp.category, 'amount': exp.amount, 'note': exp.note, 'client_id': exp.clientId},
         );
         if (res.statusCode != 200) {
           remaining.add(exp);

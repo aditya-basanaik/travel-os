@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { Plus, CalendarBlank, Users, DotsThreeVertical, ShareNetwork, Copy, Trash } from "@phosphor-icons/react";
+import { Plus, CalendarBlank, Users, DotsThreeVertical, ShareNetwork, Copy, Trash, ArrowCounterClockwise } from "@phosphor-icons/react";
 import api, { fmtErr } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-US", { m
 export default function Dashboard() {
   const { user } = useAuth();
   const [trips, setTrips] = useState(null);
+  const [deletedTrips, setDeletedTrips] = useState([]);
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
@@ -22,6 +23,9 @@ export default function Dashboard() {
     api.get("/trips")
       .then(({ data }) => setTrips(Array.isArray(data?.items) ? data.items : []))
       .catch((e) => setError(fmtErr(e)));
+    api.get("/trips/deleted")
+      .then(({ data }) => setDeletedTrips(Array.isArray(data?.items) ? data.items : []))
+      .catch(() => {});
   };
   useEffect(load, []);
 
@@ -45,6 +49,14 @@ export default function Dashboard() {
     try {
       await api.delete(`/trips/${id}`);
       toast.success("Trip deleted (restorable for 30 days)");
+      load();
+    } catch (e) { toast.error(fmtErr(e)); }
+  };
+
+  const restore = async (id) => {
+    try {
+      await api.post(`/trips/${id}/restore`);
+      toast.success("Trip restored");
       load();
     } catch (e) { toast.error(fmtErr(e)); }
   };
@@ -115,6 +127,30 @@ export default function Dashboard() {
             </motion.div>
           ))}
         </div>
+      )}
+
+      {deletedTrips.length > 0 && (
+        <section className="mt-10" data-testid="deleted-trips-section">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="label-overline mb-1">Recently deleted</p>
+              <h2 className="font-heading font-bold text-xl">Restore within 30 days</h2>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {deletedTrips.map((trip) => (
+              <div key={trip.id} className="bg-white rounded-3xl shadow-soft px-5 py-4 flex flex-wrap items-center gap-3" data-testid={`deleted-trip-${trip.id}`}>
+                <div className="flex-1 min-w-0">
+                  <p className="font-heading font-bold truncate">{trip.title}</p>
+                  <p className="text-sm text-muted-foreground">{trip.destination} · deleted {fmtDate(trip.deleted_at)}</p>
+                </div>
+                <Button onClick={() => restore(trip.id)} data-testid={`restore-trip-${trip.id}`} className="rounded-full bg-primary text-white font-bold tap-scale">
+                  <ArrowCounterClockwise size={16} className="mr-1" /> Restore
+                </Button>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );

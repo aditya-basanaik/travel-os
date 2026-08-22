@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ForkKnife, Bed, Car, Compass, Package, Trash, CloudArrowUp, WifiSlash } from "@phosphor-icons/react";
+import { ForkKnife, Bed, Car, Compass, Package, Trash, PencilSimple, CloudArrowUp, WifiSlash } from "@phosphor-icons/react";
 import api, { fmtErr } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,8 @@ const CATEGORIES = [
   { key: "misc", label: "Misc", icon: Package },
 ];
 
+const clientId = () => window.crypto?.randomUUID?.() || `expense-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 export default function ExpensesTab({ trip }) {
   const queueKey = `expense_queue_${trip.id}`;
   const [expenses, setExpenses] = useState(null);
@@ -22,6 +24,7 @@ export default function ExpensesTab({ trip }) {
   const [syncing, setSyncing] = useState(false);
   const [form, setForm] = useState({ category: "food", amount: "", note: "" });
   const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   const saveQueue = (q) => {
     setQueue(q);
@@ -60,10 +63,16 @@ export default function ExpensesTab({ trip }) {
   const addExpense = async (e) => {
     e.preventDefault();
     setAdding(true);
-    const payload = { category: form.category, amount: Number(form.amount), note: form.note || null };
+    const payload = { category: form.category, amount: Number(form.amount), note: form.note || null, client_id: clientId() };
     try {
-      await api.post(`/trips/${trip.id}/expenses`, payload);
-      toast.success("Expense logged");
+      if (editingId) {
+        await api.put(`/expenses/${editingId}`, payload);
+        toast.success("Expense updated");
+        setEditingId(null);
+      } else {
+        await api.post(`/trips/${trip.id}/expenses`, payload);
+        toast.success("Expense logged");
+      }
       setForm({ ...form, amount: "", note: "" });
       load();
     } catch (err) {
@@ -77,6 +86,12 @@ export default function ExpensesTab({ trip }) {
     } finally {
       setAdding(false);
     }
+  };
+
+  const edit = (expense) => {
+    setEditingId(expense.id);
+    setForm({ category: expense.category, amount: String(expense.amount), note: expense.note || "" });
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
   };
 
   const remove = async (id) => {
@@ -140,7 +155,7 @@ export default function ExpensesTab({ trip }) {
       </div>
 
       <form onSubmit={addExpense} className="bg-white rounded-3xl shadow-soft p-6 mb-8" data-testid="expense-form">
-        <p className="label-overline mb-4">Log an expense</p>
+        <p className="label-overline mb-4">{editingId ? "Edit expense" : "Log an expense"}</p>
         <div className="flex flex-wrap gap-2 mb-4">
           {CATEGORIES.map(({ key, label, icon: Icon }) => (
             <button key={key} type="button" onClick={() => setForm({ ...form, category: key })} data-testid={`expense-category-${key}`}
@@ -156,7 +171,7 @@ export default function ExpensesTab({ trip }) {
           <Input placeholder="Note (optional)" maxLength={200} data-testid="expense-note-input"
             value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} className="rounded-full h-12 px-5 flex-1" />
           <Button type="submit" disabled={adding} data-testid="expense-add-button" className="rounded-full h-12 px-8 bg-primary text-white font-bold tap-scale">
-            {adding ? "Adding…" : "Add"}
+            {adding ? "Saving…" : editingId ? "Save" : "Add"}
           </Button>
         </div>
       </form>
@@ -189,6 +204,10 @@ export default function ExpensesTab({ trip }) {
                   {exp.note && <p className="text-xs text-muted-foreground truncate">{exp.note}</p>}
                 </div>
                 <span className="font-heading font-bold">{trip.currency}{exp.amount.toLocaleString()}</span>
+                <button onClick={() => edit(exp)} data-testid={`expense-edit-${exp.id}`} aria-label="Edit expense"
+                  className="tap-scale w-9 h-9 rounded-full hover:bg-secondary text-muted-foreground flex items-center justify-center transition-colors">
+                  <PencilSimple size={16} />
+                </button>
                 <button onClick={() => remove(exp.id)} data-testid={`expense-delete-${exp.id}`} aria-label="Delete expense"
                   className="tap-scale w-9 h-9 rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground flex items-center justify-center transition-colors">
                   <Trash size={16} />

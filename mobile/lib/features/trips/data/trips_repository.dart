@@ -100,6 +100,18 @@ class TripsRepository {
     return [];
   }
 
+  Future<List<Trip>> getDeletedTrips() async {
+    try {
+      final response = await _dio.get('/trips/deleted');
+      if (response.statusCode == 200 && response.data is List) {
+        return (response.data as List).map((trip) => Trip.fromJson(trip)).toList();
+      }
+    } catch (e) {
+      debugPrint('Error getting deleted trips: $e');
+    }
+    return [];
+  }
+
   Future<Trip?> getTrip(String id) async {
     try {
       final response = await _dio.get('/trips/$id');
@@ -108,6 +120,18 @@ class TripsRepository {
       }
     } catch (e) {
       debugPrint('Error getting trip: $e');
+    }
+    return null;
+  }
+
+  Future<Trip?> getSharedTrip(String token) async {
+    try {
+      final response = await _dio.get('/trips/shared/$token');
+      if (response.statusCode == 200) {
+        return Trip.fromJson(response.data);
+      }
+    } catch (e) {
+      debugPrint('Error getting shared trip: $e');
     }
     return null;
   }
@@ -133,6 +157,10 @@ class TripsRepository {
           'people_count': peopleCount,
           'interests': interests,
         },
+        options: Options(
+          receiveTimeout: const Duration(seconds: 300),
+          sendTimeout: const Duration(seconds: 60),
+        ),
       );
       if (response.statusCode == 200) {
         return Trip.fromJson(response.data);
@@ -170,6 +198,25 @@ class TripsRepository {
     return null;
   }
 
+  Future<Trip?> refineItinerary(String tripId, String instruction) async {
+    try {
+      final response = await _dio.post(
+        '/trips/$tripId/refine',
+        data: {'instruction': instruction.trim()},
+        options: Options(
+          receiveTimeout: const Duration(seconds: 300),
+          sendTimeout: const Duration(seconds: 60),
+        ),
+      );
+      if (response.statusCode == 200) {
+        return Trip.fromJson(response.data);
+      }
+    } catch (e) {
+      debugPrint('Error refining itinerary: $e');
+    }
+    return null;
+  }
+
   Future<Trip?> duplicateTrip(String tripId) async {
     try {
       final response = await _dio.post('/trips/$tripId/duplicate');
@@ -200,6 +247,16 @@ class TripsRepository {
       return response.statusCode == 200;
     } catch (e) {
       debugPrint('Error deleting trip: $e');
+      return false;
+    }
+  }
+
+  Future<bool> restoreTrip(String id) async {
+    try {
+      final response = await _dio.post('/trips/$id/restore');
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('Error restoring trip: $e');
       return false;
     }
   }

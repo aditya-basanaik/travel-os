@@ -149,6 +149,32 @@ class AuthRepository extends ChangeNotifier {
     }
   }
 
+  Future<String?> loginWithGoogleToken(String idToken) async {
+    try {
+      final response = await _client.dio.post(
+        '/auth/google/token',
+        data: {'id_token': idToken},
+      );
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data;
+        _currentUser = AuthUser.fromJson(data);
+        final accessToken = data['access_token'];
+        final refreshToken = data['refresh_token'];
+        if (accessToken != null && refreshToken != null) {
+          await _client.saveSession(accessToken, refreshToken);
+        }
+        notifyListeners();
+        return null;
+      }
+      return 'Google token verification failed';
+    } on DioException catch (e) {
+      final msg = e.response?.data?['detail'];
+      return msg is String ? msg : 'Google login failed';
+    } catch (e) {
+      return 'Something went wrong';
+    }
+  }
+
   Future<void> logout() async {
     try {
       await _client.dio.post('/auth/logout');
@@ -181,6 +207,24 @@ class AuthRepository extends ChangeNotifier {
       'success': false,
       'message': 'Failed to request reset link.'
     };
+  }
+
+  Future<String?> resetPassword(String token, String password) async {
+    try {
+      final response = await _client.dio.post(
+        '/auth/reset-password',
+        data: {'token': token, 'password': password},
+      );
+      if (response.statusCode == 200) {
+        return null;
+      }
+      return 'Unable to update password';
+    } on DioException catch (e) {
+      final msg = e.response?.data?['detail'];
+      return msg is String ? msg : 'Reset link is invalid or expired';
+    } catch (e) {
+      return 'Something went wrong. Please try again.';
+    }
   }
 
   ApiClient get apiClient => _client;

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "trips-save-edit",
+    "title": "Saving and editing trips",
+    "content": "Trips created in Travel OS are saved to your account automatically. Open a trip from the Trips screen to continue later. On the web, use Edit itinerary to change activity times, titles, descriptions, costs, or stops, then save the changes.",
+    "keywords": ["save", "saved", "trip", "trips", "edit", "itinerary", "continue"]
+  },
+  {
+    "id": "expenses",
+    "title": "Expense tracking",
+    "content": "Open a trip and choose Expenses to see budget, spent, remaining, and category totals. Expenses support food, stay, transport, activities, and misc categories. If the web app is offline, a new expense is queued locally and attempted again when the connection returns.",
+    "keywords": ["expense", "expenses", "budget", "spent", "remaining", "offline", "food", "hotel", "transport"]
+  },
+  {
+    "id": "sharing",
+    "title": "Sharing a trip",
+    "content": "Use Share on a trip to create a shareable read-only link. Anyone with the link can view the shared itinerary, but shared viewers cannot edit the trip. Travel OS does not provide real-time collaborative editing.",
+    "keywords": ["share", "sharing", "link", "read-only", "readonly", "collaboration", "edit"]
+  },
+  {
+    "id": "profile",
+    "title": "Profile preferences",
+    "content": "Open Profile to update your name, profile photo URL, age, budget preference, food preference, languages, and favourite destinations. Save profile changes using the Save profile action.",
+    "keywords": ["profile", "name", "photo", "age", "preferences", "language", "destination"]
+  },
+  {
+    "id": "maps",
+    "title": "Maps and place links",
+    "content": "Trip activity, hotel, and restaurant locations can be opened in Google Maps using their map links. The current map tab is a placeholder until a Google Maps Platform key is configured; live directions, nearby search, and embedded maps are not currently available.",
+    "keywords": ["map", "maps", "google", "directions", "nearby", "location", "route"]
+  },
+  {
+    "id": "delete-trip",
+    "title": "Deleting trips",
+    "content": "Deleting a trip currently soft-deletes it so it disappears from the active trip list. A restore screen and restore endpoint are not yet available in the current MVP.",
+    "keywords": ["delete", "deleting", "remove", "restore", "trip", "archive"]
+  }
+]
