@@ -29,10 +29,25 @@ export default function Dashboard() {
   };
   useEffect(load, []);
 
+  const copyShareLink = async (shareUrl) => {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(shareUrl);
+      return;
+    }
+    const input = document.createElement("textarea");
+    input.value = shareUrl;
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    input.remove();
+  };
+
   const share = async (id) => {
     try {
       const { data } = await api.post(`/trips/${id}/share`);
-      await navigator.clipboard.writeText(`${window.location.origin}/shared/${data.share_token}`);
+      await copyShareLink(`${window.location.origin}/shared/${data.share_token}`);
       toast.success("Share link copied to clipboard");
     } catch (e) { toast.error(fmtErr(e)); }
   };
@@ -95,7 +110,7 @@ export default function Dashboard() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="trips-grid">
           {trips.map((t, i) => (
-            <motion.div key={t.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}
+            <motion.div key={t.id} layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04, duration: 0.35, ease: "easeOut" }}
               className="card-lift relative rounded-3xl overflow-hidden bg-white shadow-soft cursor-pointer"
               data-testid={`trip-card-${t.id}`} onClick={() => navigate(`/trips/${t.id}`)}>
               <div className="relative h-44">
@@ -139,7 +154,7 @@ export default function Dashboard() {
           </div>
           <div className="space-y-3">
             {deletedTrips.map((trip) => (
-              <div key={trip.id} className="bg-white rounded-3xl shadow-soft px-5 py-4 flex flex-wrap items-center gap-3" data-testid={`deleted-trip-${trip.id}`}>
+              <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: "easeOut" }} key={trip.id} className="bg-white rounded-3xl shadow-soft px-5 py-4 flex flex-wrap items-center gap-3" data-testid={`deleted-trip-${trip.id}`}>
                 <div className="flex-1 min-w-0">
                   <p className="font-heading font-bold truncate">{trip.title}</p>
                   <p className="text-sm text-muted-foreground">{trip.destination} · deleted {fmtDate(trip.deleted_at)}</p>
@@ -147,7 +162,7 @@ export default function Dashboard() {
                 <Button onClick={() => restore(trip.id)} data-testid={`restore-trip-${trip.id}`} className="rounded-full bg-primary text-white font-bold tap-scale">
                   <ArrowCounterClockwise size={16} className="mr-1" /> Restore
                 </Button>
-              </div>
+              </motion.div>
             ))}
           </div>
         </section>

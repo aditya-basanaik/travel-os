@@ -53,7 +53,7 @@ The web API client uses `http://localhost:8001/api` by default and Axios credent
 ## Known Bugs / Risks
 
 1. Production CORS is now configurable through `CORS_ORIGINS` or `FRONTEND_URL`; verify the deployed origin list before production.
-2. Flutter share URLs now use `TRAVEL_OS_WEB_URL` (default `http://localhost:3000`) and `/shared/{token}`; set the define for deployed/mobile builds.
+2. Flutter share URLs use `TRAVEL_OS_WEB_URL` (LAN default `http://172.19.47.12:3000`) and `/shared/{token}`; the mobile dialog has a copy action and shared-owner mapping. Set the define for deployed/mobile builds.
 3. `mobile/test/widget_test.dart` now exercises the login screen without live auth networking; rerun it from `mobile/` to confirm the final isolated version.
 4. Offline amounts are not included in server summaries until synchronization.
 5. AI output validation is only JSON shape plus non-empty days; generated place/pricing claims are untrusted.
@@ -127,7 +127,20 @@ Claude is called server-side through `LlmChat` with a system instruction to retu
 
 ## Current Map Implementation
 
-Maps tabs are placeholders. Stop and recommendation actions open Google Maps search URLs; hotels also open Booking.com search. No SDK/API key, live place data, routes, or directions exists.
+Maps tabs are being upgraded from placeholder links to a native Google Maps foundation. The trip detail screen now uses the Google Maps SDK when the app is built with a valid key, while keeping a safe fallback state when the key is missing. This preserves the existing experience without blocking startup or breaking older features.
+
+Sharing and restore reliability fixes are complete across web and Flutter: mobile parses the backend `{items: [...]}` deleted-trip response, refreshes the deleted list after restore/delete, uses a LAN-capable web URL, and exposes a copy action for generated share links. Web sharing has a clipboard fallback for non-secure LAN contexts, and dashboard list transitions now use layout-aware easing.
+
+The restore endpoint also normalizes legacy timezone-naive `deleted_at` values from MongoDB to UTC before applying the 30-day restore-window check; this prevents a server-side 500 during web or mobile restore.
+
+The mobile profile page no longer crashes when an existing account has an older food-preference spelling. Values are normalized to the three supported choices: `veg`, `nonveg`, and `both`.
+
+## Current Milestone Progress
+
+- [x] Google OAuth audience mismatch fixed for the mobile client and backend allowlist.
+- [x] Flutter debug APK rebuilt successfully with the corrected client ID and API endpoint.
+- [x] Mobile map foundation updated for the Android SDK without removing the placeholder fallback.
+- [ ] Full route calculation, nearby place discovery, and production map polish remain pending API/provider configuration.
 
 ## Last Changes
 
@@ -135,11 +148,11 @@ The Git history contains one initial project setup commit (`5ac8e1d`, 2026-08-16
 
 ## Current Task
 
-Continue Milestone 1 Flutter parity without changing the existing architecture.
+Continue Milestone 2 maps and trip reliability without changing the existing architecture.
 
 ## Next Task
 
-Configure the Google Android OAuth client, SHA fingerprint, backend `GOOGLE_OAUTH_CLIENT_IDS`, and Flutter `GOOGLE_SERVER_CLIENT_ID` for production builds. After that, continue with public shared-trip support and provider-backed Maps, directions, attractions, hotel, and restaurant discovery.
+Add route/directions behavior and nearby-place discovery to the native map foundation, followed by provider-backed attractions, hotel, and restaurant discovery.
 
 ## Do Not Touch Without Review
 

@@ -17,6 +17,7 @@ class Trip {
   final String? coverImage;
   final Map<String, dynamic>? itinerary;
   final String? shareToken;
+  final String? sharedBy;
 
   Trip({
     required this.id,
@@ -32,6 +33,7 @@ class Trip {
     this.coverImage,
     this.itinerary,
     this.shareToken,
+    this.sharedBy,
   });
 
   factory Trip.fromJson(Map<String, dynamic> json) {
@@ -49,6 +51,7 @@ class Trip {
       coverImage: json['cover_image'],
       itinerary: json['itinerary'],
       shareToken: json['share_token'],
+      sharedBy: json['shared_by'],
     );
   }
 
@@ -58,6 +61,7 @@ class Trip {
     String? coverImage,
     Map<String, dynamic>? itinerary,
     String? shareToken,
+    String? sharedBy,
   }) {
     return Trip(
       id: id,
@@ -73,6 +77,7 @@ class Trip {
       coverImage: coverImage ?? this.coverImage,
       itinerary: itinerary ?? this.itinerary,
       shareToken: shareToken ?? this.shareToken,
+      sharedBy: sharedBy ?? this.sharedBy,
     );
   }
 }
@@ -103,8 +108,11 @@ class TripsRepository {
   Future<List<Trip>> getDeletedTrips() async {
     try {
       final response = await _dio.get('/trips/deleted');
-      if (response.statusCode == 200 && response.data is List) {
-        return (response.data as List).map((trip) => Trip.fromJson(trip)).toList();
+      if (response.statusCode == 200 && response.data is Map) {
+        final items = response.data['items'];
+        if (items is List) {
+          return items.map((trip) => Trip.fromJson(trip)).toList();
+        }
       }
     } catch (e) {
       debugPrint('Error getting deleted trips: $e');

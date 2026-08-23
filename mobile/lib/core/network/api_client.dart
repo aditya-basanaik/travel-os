@@ -10,7 +10,7 @@ class ApiClient {
 
   static const String webAppUrl = String.fromEnvironment(
     'TRAVEL_OS_WEB_URL',
-    defaultValue: 'http://localhost:3000',
+    defaultValue: 'http://172.19.47.12:3000',
   );
 
   static String get baseUrl {

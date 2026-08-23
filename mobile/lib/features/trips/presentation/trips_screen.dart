@@ -2,15 +2,35 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/services.dart';
 import 'package:travel_os/core/network/api_client.dart';
 import 'package:travel_os/core/theme/app_theme.dart';
 import 'package:travel_os/features/trips/data/trips_repository.dart';
 
-class TripsScreen extends ConsumerWidget {
+class TripsScreen extends ConsumerStatefulWidget {
   const TripsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TripsScreen> createState() => _TripsScreenState();
+}
+
+class _TripsScreenState extends ConsumerState<TripsScreen> {
+  late Future<List<Trip>> _deletedTripsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _deletedTripsFuture = ref.read(tripsRepositoryPrv).getDeletedTrips();
+  }
+
+  void _refreshDeletedTrips() {
+    setState(() {
+      _deletedTripsFuture = ref.read(tripsRepositoryPrv).getDeletedTrips();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final tripsAsync = ref.watch(userTripsPrv);
 
     return Scaffold(
@@ -201,23 +221,22 @@ class TripsScreen extends ConsumerWidget {
       onSelected: (value) async {
         if (value == 'duplicate') {
           final dup = await ref.read(tripsRepositoryPrv).duplicateTrip(trip.id);
-          if (dup != null) {
-            ref.refresh(userTripsPrv);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Trip duplicated successfully!')),
-            );
-          }
+          if (dup == null || !context.mounted) return;
+          ref.invalidate(userTripsPrv);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Trip duplicated successfully!')),
+          );
         } else if (value == 'delete') {
           final ok = await ref.read(tripsRepositoryPrv).deleteTrip(trip.id);
-          if (ok) {
-            ref.refresh(userTripsPrv);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Trip archived. Restore within 30 days.')),
-            );
-          }
+          if (!ok || !context.mounted) return;
+          ref.invalidate(userTripsPrv);
+          _refreshDeletedTrips();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Trip archived. Restore within 30 days.')),
+          );
         } else if (value == 'share') {
           final token = await ref.read(tripsRepositoryPrv).shareTrip(trip.id);
-          if (token != null) {
+          if (token != null && context.mounted) {
             final shareUrl = '${ApiClient.webAppUrl}/shared/$token';
             showDialog(
               context: context,
@@ -242,6 +261,18 @@ class TripsScreen extends ConsumerWidget {
                   ],
                 ),
                 actions: [
+                  TextButton(
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: shareUrl));
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Share link copied.')),
+                        );
+                      }
+                    },
+                    child: Text('Copy link', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                  ),
                   TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: Text('Close', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold)),
@@ -290,7 +321,7 @@ class TripsScreen extends ConsumerWidget {
 
   Widget _buildDeletedTripsSection(BuildContext context, WidgetRef ref) {
     return FutureBuilder<List<Trip>>(
-      future: ref.read(tripsRepositoryPrv).getDeletedTrips(),
+      future: _deletedTripsFuture,
       builder: (context, snapshot) {
         final deletedTrips = snapshot.data ?? [];
         if (snapshot.connectionState == ConnectionState.waiting && deletedTrips.isEmpty) {
@@ -328,6 +359,7 @@ class TripsScreen extends ConsumerWidget {
                         if (!context.mounted) return;
                         if (restored) {
                           ref.invalidate(userTripsPrv);
+                          _refreshDeletedTrips();
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Trip restored successfully.')),
                           );

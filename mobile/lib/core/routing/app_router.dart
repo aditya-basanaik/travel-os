@@ -32,7 +32,7 @@ final appRouterPrv = Provider<GoRouter>((ref) {
       if (!isLoggedIn && !isPublicRoute) {
         return '/login';
       }
-      if (isLoggedIn && isLoggingIn) {
+      if (isLoggedIn && isPublicRoute) {
         return '/';
       }
       return null;

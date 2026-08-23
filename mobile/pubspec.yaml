@@ -27,6 +27,7 @@ dependencies:
   url_launcher: ^6.2.4
   flutter_web_auth_2: ^4.1.0
   google_sign_in: ^6.2.2
+  google_maps_flutter: ^2.9.0
 
 
 

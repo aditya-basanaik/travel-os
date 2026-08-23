@@ -24,10 +24,25 @@ export default function TripDetail() {
   };
   useEffect(load, [id]);
 
+  const copyShareLink = async (shareUrl) => {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(shareUrl);
+      return;
+    }
+    const input = document.createElement("textarea");
+    input.value = shareUrl;
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    input.remove();
+  };
+
   const share = async () => {
     try {
       const { data } = await api.post(`/trips/${id}/share`);
-      await navigator.clipboard.writeText(`${window.location.origin}/shared/${data.share_token}`);
+      await copyShareLink(`${window.location.origin}/shared/${data.share_token}`);
       toast.success("Share link copied to clipboard");
     } catch (e) { toast.error(fmtErr(e)); }
   };

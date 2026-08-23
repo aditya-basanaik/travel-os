@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:travel_os/core/theme/app_theme.dart';
@@ -33,6 +34,9 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
   bool _refiningItinerary = false;
   Map<String, dynamic>? _draftItinerary;
   final _refineController = TextEditingController();
+  final String _mapsApiKey = const String.fromEnvironment('MAPS_API_KEY', defaultValue: '');
+  final Set<Marker> _markers = {};
+  GoogleMapController? _mapController;
 
   @override
   void initState() {
@@ -107,6 +111,35 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
     }
   }
 
+  Future<void> _configureMapMarkers(Trip trip) async {
+    if (!mounted) return;
+
+    final activities = trip.itinerary?['days'] ?? [];
+    final nextMarkers = <Marker>{};
+
+    for (final day in activities) {
+      final dayActivities = day['activities'] ?? [];
+      for (int index = 0; index < dayActivities.length; index++) {
+        final activity = dayActivities[index];
+        final location = activity['location'];
+        if (location is String && location.trim().isNotEmpty) {
+          final title = activity['title'] ?? 'Stop';
+          nextMarkers.add(
+            Marker(
+              markerId: MarkerId('${title}_$index'),
+              position: const LatLng(12.9716, 77.5946),
+              infoWindow: InfoWindow(title: title, snippet: location),
+            ),
+          );
+        }
+      }
+    }
+
+    if (mounted) {
+      setState(() => _markers.addAll(nextMarkers));
+    }
+  }
+
   Future<void> _launchUrl(String urlString) async {
     final uri = Uri.parse(urlString);
     try {
@@ -135,6 +168,10 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
             appBar: AppBar(),
             body: const Center(child: Text('Trip not found')),
           );
+        }
+
+        if (_markers.isEmpty && (trip.itinerary?['days'] ?? []).isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _configureMapMarkers(trip));
         }
 
         final itinerary = _editingItinerary ? (_draftItinerary ?? trip.itinerary ?? {}) : (trip.itinerary ?? {});

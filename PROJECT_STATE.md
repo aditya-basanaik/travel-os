@@ -54,10 +54,10 @@ Status uses `Complete`, `Partial`, `Broken`, `Missing`, or `Unknown` for Phase 1
 | Hotels | Partial | AI-generated recommendation cards and Google Maps/Booking.com deep links. No live search/details, distance, reliable prices, or official partner integration. Names/prices may be generated. |
 | Restaurants | Partial | AI-generated cards, ratings, cuisine, vegetarian flag, favorites, and Maps links. No live search/details/open-now/family filters. |
 | Attractions | Missing | No separate model, API, tab, or discovery flow. Generic itinerary activities are the only approximation. |
-| Google Maps | Partial | Map tabs are visual placeholders; individual stops open Google Maps search URLs. No embedded map, current location, markers, routes, directions, distance, travel time, or nearby search. |
+| Google Maps | Partial | Mobile now has a native SDK foundation with a safe no-key fallback; individual stops and web map actions still open Google Maps search URLs. Embedded routes, directions, distance, travel time, and nearby search remain pending. |
 | Weather | Partial | `/trips/{id}/weather` uses OpenWeather geocoding/5-day forecast when keyed; otherwise returns null values. It is shown in web itinerary and mobile map tab. |
 | Saved/recent trips | Partial | Trip list, open, edit, duplicate, soft-delete, restore, and favorites exist. No separate archive view or continue workflow beyond persisted trip data. |
-| Trip sharing | Partial | Server token and public read-only route exist; web shared page works. Flutter constructs the link from the API URL rather than a frontend URL. No realtime collaboration. |
+| Trip sharing | Partial | Server token and public read-only routes work on web and mobile. Mobile share links use the configured web URL and expose a copy action. No realtime collaboration. |
 | Expense tracking | Partial | Budget/spent/remaining, categories, add/list/edit/delete, summary, and web local queue exist. |
 | Offline expenses | Partial | Web localStorage and Flutter SharedPreferences queues retry online/manual sync with client IDs; pending amounts are not included in server summaries until synchronization. |
 | RAG Travel Assistant | Partial | Protected FastAPI `/rag/ask`, controlled in-code FAQ corpus, lexical retrieval, grounded Claude prompt/fallback, source metadata, and React `/help` plus Flutter `/help` UI exist. No vector store, persistent knowledge collection, or chat history yet. |
@@ -146,7 +146,7 @@ The current implementation uses the versioned `backend/knowledge_base.json` FAQ 
 
 ## Maps
 
-Both clients render a map placeholder that states a Google Maps Platform key is required. Activity and recommendation actions open Google Maps Search URLs; hotel cards also open a Booking.com search deep link. There is no Google Maps SDK/API key use, current location, embedded map, marker layer, route/directions calculation, distance/time, place search, or nearby search. `OPENWEATHER_API_KEY` is used separately for weather and is not a Maps implementation.
+Mobile trip detail now has a native Google Maps SDK foundation and itinerary marker scaffolding when built with `MAPS_API_KEY`; it falls back safely when the key is absent. Activity and recommendation actions still open Google Maps Search URLs; hotel cards also open a Booking.com search deep link. Route/directions calculation, distance/time, place search, and nearby search are still pending.
 
 ## Known Problems and Technical Debt
 
@@ -158,11 +158,12 @@ Both clients render a map placeholder that states a Google Maps Platform key is 
 - AI fallback content intentionally uses generic/generated hotel and restaurant names.
 - AI refinement now exists at protected `POST /api/trips/{trip_id}/refine`; web controls and a deterministic fallback are implemented. Persistent conversation state is absent.
 - Hotels/restaurants are not live discovery, and attractions are absent.
-- Maps are placeholders/external links rather than an interactive map.
+- Maps have a mobile SDK foundation with a safe fallback; route and nearby-place behavior remain incomplete.
 - Expense update exists at protected `PUT /api/expenses/{expense_id}` and web editing is wired. Offline submissions now carry client IDs and duplicate retries are ignored; offline amounts are not included in server summaries until sync.
-- Trip restore exists at `POST /api/trips/{trip_id}/restore`; web dashboard lists eligible deleted trips and provides Restore actions.
-- Flutter sharing now builds the public route from `ApiClient.webAppUrl` and `/shared/{token}`; deployments can set `TRAVEL_OS_WEB_URL` with `--dart-define`.
+- Trip restore exists at `POST /api/trips/{trip_id}/restore`; web dashboard lists eligible deleted trips and provides Restore actions. The backend normalizes legacy timezone-naive Mongo deletion timestamps before checking the 30-day window.
+- Flutter sharing now builds the public route from `ApiClient.webAppUrl` and `/shared/{token}`, parses the backend owner name, and offers a copy action; deployments can set `TRAVEL_OS_WEB_URL` with `--dart-define`.
 - Flutter now has a reset-password screen/route and direct Android Google Sign-In. Pass `GOOGLE_SERVER_CLIENT_ID` to the Flutter build and configure the matching backend `GOOGLE_OAUTH_CLIENT_IDS` value.
+- Mobile profile rendering is fixed for legacy food-preference values; the edit control now supports only `veg`, `nonveg`, and `both`.
 - Flutter `ApiClient` has a hardcoded LAN IP, making physical-device use environment-specific.
 - Mobile feature coverage still lacks shared-trip public view, attractions, and live Maps. Favorites, reset, restore, expense editing, itinerary editing, refinement, trip-level expenses, and Android Google Sign-In are now present.
 - Web dashboard does not implement search, destination recommendations, nearby places, or explicit saved/past trip sections beyond the trip list.
@@ -192,6 +193,13 @@ Both clients render a map placeholder that states a Google Maps Platform key is 
 - [ ] Complete mobile parity for share/map/place flows and native Google OAuth.
 - [ ] Automated critical-journey tests on web, backend, and mobile.
 
+## Current Milestone Progress
+
+- [x] Google OAuth audience mismatch fixed for the mobile client and backend allowlist.
+- [x] Flutter debug APK rebuilt successfully with the corrected client ID and API endpoint.
+- [x] Mobile project updated to include the native Google Maps SDK foundation without removing the existing placeholder fallback when no API key is configured.
+- [ ] Full end-to-end real map interactions, route calculation, and nearby place discovery are still pending provider/API configuration.
+
 ## Last Completed Work
 
 The most recent slice completed Flutter trip-level expenses, itinerary activity editing/refinement, password reset routing/API integration, recently-deleted trip restoration, hotel/restaurant favorites, and expense editing for both remote and offline-queued expenses. Backend regression tests remained green and Flutter widget/focused analysis checks passed.
@@ -205,7 +213,7 @@ The most recent slice completed Flutter trip-level expenses, itinerary activity 
 
 ## Next Recommended Task
 
-**P1: complete Flutter parity.** Next highest-value work is native Google OAuth and public shared-trip support, followed by provider-backed Maps, directions, attractions, hotel, and restaurant discovery.
+**P1: finish trip reliability and maps.** Sharing and restore now work across web/mobile, with smoother dashboard transitions. Next highest-value work is route/directions behavior, attractions, and provider-backed hotel and restaurant discovery.
 
 ## Verification Performed During Reconstruction
 

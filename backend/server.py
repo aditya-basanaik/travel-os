@@ -1232,7 +1232,10 @@ async def restore_trip(trip_id: str, user: dict = Depends(get_current_user)):
     trip = await db.trips.find_one({"_id": trip_id, "user_id": user["_id"]})
     if not trip or not trip.get("deleted_at"):
         raise HTTPException(404, "Deleted trip not found")
-    if utcnow() - trip["deleted_at"] > timedelta(days=30):
+    deleted_at = trip["deleted_at"]
+    if deleted_at.tzinfo is None:
+        deleted_at = deleted_at.replace(tzinfo=timezone.utc)
+    if utcnow() - deleted_at > timedelta(days=30):
         raise HTTPException(410, "Trip restore window has expired")
     await db.trips.update_one({"_id": trip_id, "user_id": user["_id"]}, {"$set": {"deleted_at": None, "updated_at": utcnow()}})
     return trip_out(await db.trips.find_one({"_id": trip_id, "user_id": user["_id"]}))
@@ -1373,7 +1376,7 @@ app.include_router(api_router)
 if not IS_PROD:
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:[0-9]+)?",
+        allow_origins=CORS_ORIGINS or ["http://localhost:3000", "http://127.0.0.1:3000"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

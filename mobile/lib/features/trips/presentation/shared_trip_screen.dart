@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -150,7 +148,7 @@ class _SharedTripScreenState extends ConsumerState<SharedTripScreen> {
                         style: GoogleFonts.dmSans(fontSize: 15, color: AppTheme.mutedText),
                       ),
                       const SizedBox(height: 20),
-                      if (trip.shareToken != null)
+                      if (trip.sharedBy != null)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
@@ -158,7 +156,7 @@ class _SharedTripScreenState extends ConsumerState<SharedTripScreen> {
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Text(
-                            'Shared by ${trip.shareToken ?? 'a traveller'}',
+                            'Shared by ${trip.sharedBy ?? 'a traveller'}',
                             style: GoogleFonts.dmSans(fontWeight: FontWeight.w600, color: AppTheme.primary),
                           ),
                         ),
@@ -278,7 +276,7 @@ class _SharedTripScreenState extends ConsumerState<SharedTripScreen> {
                                 ],
                               ),
                             );
-                          }).toList(),
+                          }),
                         ],
                       ),
                     );

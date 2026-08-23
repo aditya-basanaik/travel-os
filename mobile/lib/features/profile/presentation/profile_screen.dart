@@ -27,7 +27,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   String? _selectedFood;
 
   final List<String> _budgetOptions = ['budget', 'moderate', 'luxury'];
-  final List<String> _foodOptions = ['anything', 'vegetarian', 'vegan', 'halal', 'kosher'];
+  final List<String> _foodOptions = ['veg', 'nonveg', 'both'];
 
   @override
   void initState() {
@@ -53,7 +53,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _destinationsController.text = profile.favouriteDestinations.join(', ');
     _languagesController.text = profile.languages.join(', ');
     _selectedBudget = profile.budgetPref?.toLowerCase();
-    _selectedFood = profile.foodPref?.toLowerCase();
+    final foodPreference = profile.foodPref?.trim().toLowerCase();
+    _selectedFood = switch (foodPreference) {
+      'veg' || 'vegetarian' || 'vegan' => 'veg',
+      'nonveg' || 'non-veg' || 'non vegetarian' => 'nonveg',
+      'both' => 'both',
+      _ => null,
+    };
   }
 
   Future<void> _save(UserProfile currentProfile) async {
@@ -88,9 +94,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         _isSaving = false;
         if (updated != null) {
           _isEditing = false;
-          ref.refresh(userProfilePrv);
         }
       });
+      if (updated != null) ref.invalidate(userProfilePrv);
     }
   }
 
@@ -283,7 +289,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           const SizedBox(height: 6),
                           _isEditing
                               ? DropdownButtonFormField<String>(
-                                  value: _selectedFood,
+                                  value: _foodOptions.contains(_selectedFood) ? _selectedFood : null,
                                   items: _foodOptions
                                       .map((e) => DropdownMenuItem(value: e, child: Text(e.toUpperCase())))
                                       .toList(),
