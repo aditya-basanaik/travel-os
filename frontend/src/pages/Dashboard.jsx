@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { Plus, CalendarBlank, Users, DotsThreeVertical, ShareNetwork, Copy, Trash, ArrowCounterClockwise } from "@phosphor-icons/react";
+import { Plus, CalendarBlank, Users, DotsThreeVertical, ShareNetwork, Copy, Trash, ArrowCounterClockwise, MagnifyingGlass, X, Sparkle, Question, MapPin } from "@phosphor-icons/react";
 import api, { fmtErr } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -17,17 +17,30 @@ export default function Dashboard() {
   const [trips, setTrips] = useState(null);
   const [deletedTrips, setDeletedTrips] = useState([]);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [activeSearch, setActiveSearch] = useState("");
+  const [profile, setProfile] = useState(null);
   const navigate = useNavigate();
 
-  const load = () => {
-    api.get("/trips")
+  const load = (searchTerm = activeSearch) => {
+    api.get("/trips", { params: searchTerm ? { search: searchTerm } : undefined })
       .then(({ data }) => setTrips(Array.isArray(data?.items) ? data.items : []))
       .catch((e) => setError(fmtErr(e)));
     api.get("/trips/deleted")
       .then(({ data }) => setDeletedTrips(Array.isArray(data?.items) ? data.items : []))
       .catch(() => {});
+    api.get("/profile")
+      .then(({ data }) => setProfile(data))
+      .catch(() => {});
   };
   useEffect(load, []);
+
+  const submitSearch = (event) => {
+    event.preventDefault();
+    const nextSearch = search.trim();
+    setActiveSearch(nextSearch);
+    load(nextSearch);
+  };
 
   const copyShareLink = async (shareUrl) => {
     if (navigator.clipboard && window.isSecureContext) {
@@ -91,6 +104,62 @@ export default function Dashboard() {
       </div>
 
       {error && <p className="text-destructive font-medium mb-6" data-testid="trips-error">{error}</p>}
+
+      <form onSubmit={submitSearch} className="mb-8 flex gap-2 max-w-xl" data-testid="trip-search-form">
+        <label className="relative flex-1">
+          <MagnifyingGlass size={18} className="absolute left-3 top-3 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search trips or destinations"
+            aria-label="Search trips or destinations"
+            className="w-full rounded-2xl border border-border bg-white py-2.5 pl-10 pr-10 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          {search && <button type="button" onClick={() => { setSearch(""); setActiveSearch(""); load(""); }} className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground" aria-label="Clear trip search"><X size={18} /></button>}
+        </label>
+        <Button type="submit" className="rounded-2xl bg-primary text-white font-bold" data-testid="trip-search-btn"><MagnifyingGlass size={17} className="mr-1" /> Search</Button>
+      </form>
+
+      {activeSearch && trips?.length === 0 && <p className="text-sm text-muted-foreground mb-6">No trips match “{activeSearch}”.</p>}
+
+      <section className="mb-10" aria-label="Quick actions" data-testid="quick-actions">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="label-overline mb-1">Your workspace</p>
+            <h2 className="font-heading font-bold text-xl">Pick up where you left off</h2>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { to: "/plan", label: "Plan a trip", hint: "Build an itinerary", icon: Plus },
+            { to: "/plan", label: "AI planner", hint: "Start with your ideas", icon: Sparkle },
+            { to: "/trips", label: "Saved trips", hint: "Browse your plans", icon: CalendarBlank },
+            { to: "/help", label: "Travel OS help", hint: "Find an answer", icon: Question },
+          ].map(({ to, label, hint, icon: Icon }) => (
+            <Link key={label} to={to} className="group rounded-2xl border border-border bg-white p-4 shadow-soft transition-transform hover:-translate-y-0.5" data-testid={`quick-action-${label.toLowerCase().replaceAll(" ", "-")}`}>
+              <Icon size={20} weight="duotone" className="text-primary mb-3" />
+              <p className="font-heading font-bold text-sm">{label}</p>
+              <p className="text-xs text-muted-foreground mt-1">{hint}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {profile?.favourite_destinations?.length > 0 && (
+        <section className="mb-10" data-testid="recommended-destinations">
+          <p className="label-overline mb-1">From your profile</p>
+          <h2 className="font-heading font-bold text-xl mb-4">Destinations you saved</h2>
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {profile.favourite_destinations.map((destination) => (
+              <Link key={destination} to="/plan" className="min-w-48 rounded-2xl border border-border bg-white p-4 shadow-soft hover:-translate-y-0.5 transition-transform">
+                <MapPin size={20} weight="duotone" className="text-primary mb-4" />
+                <p className="font-heading font-bold truncate">{destination}</p>
+                <p className="text-xs text-muted-foreground mt-1">Plan a trip here</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {trips === null ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="trips-loading">

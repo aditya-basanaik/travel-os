@@ -43,18 +43,18 @@ Status uses `Complete`, `Partial`, `Broken`, `Missing`, or `Unknown` for Phase 1
 | Email registration/login/logout | Partial | FastAPI routes and web/mobile forms exist; tokens are also returned in JSON as well as cookies. |
 | Password hashing | Complete | bcrypt hashing and verification are implemented server-side. |
 | Current session/protected APIs | Partial | JWT access/refresh cookies and Bearer fallback exist; mobile stores tokens securely. |
-| Forgot/reset password | Partial | Web flow exists; no SMTP, reset link is returned in development response/logs; Flutter has forgot request but no reset-password route/screen. |
+| Forgot/reset password | Partial | Web and Flutter reset screens/routes exist; no SMTP, reset link is returned in development response/logs. |
 | Google login | Partial | Web and Flutter use Emergent's managed Google OAuth broker; Flutter launches the system browser and receives a `travelos://auth/callback` session. Direct Google OAuth is not configured. |
 | Phone OTP / Apple sign-in | Missing | No provider or routes. Architecturally deferred. |
 | Profile/preferences | Partial | Name, email, photo URL, age, budget, food preference, languages, and favourite destinations exist. No upload, travel style, or broad preference model. |
-| User dashboard/home | Partial | Web dashboard and Flutter home show greetings, trips, and AI planning CTA. Search, recommendations, nearby places, and quick-action breadth are absent. |
+| User dashboard/home | Partial | Web and Flutter show greetings, trips, AI planning CTA, authenticated trip/destination search, workspace quick actions, and profile-grounded saved-destination recommendations. Richer saved-trip presentation remains absent. |
 | AI trip planner | Partial | Web/mobile forms call `/api/trips/plan`; Claude JSON generation has a local fallback and Unsplash enrichment. There is no natural-language planner UI, live data grounding, or output validation. |
 | AI itinerary refinement | Partial | Protected `/trips/{id}/refine` uses Claude when configured and a deterministic fallback; web and Flutter controls exist, but refinement has no conversation state. |
 | Day-by-day itinerary | Complete | Generated and displayed on both clients; web and Flutter allow activity editing, add/remove, and persisted itinerary replacement. |
 | Hotels | Partial | AI-generated recommendation cards and Google Maps/Booking.com deep links. No live search/details, distance, reliable prices, or official partner integration. Names/prices may be generated. |
 | Restaurants | Partial | AI-generated cards, ratings, cuisine, vegetarian flag, favorites, and Maps links. No live search/details/open-now/family filters. |
 | Attractions | Missing | No separate model, API, tab, or discovery flow. Generic itinerary activities are the only approximation. |
-| Google Maps | Partial | Mobile now has a native SDK foundation with a safe no-key fallback; individual stops and web map actions still open Google Maps search URLs. Embedded routes, directions, distance, travel time, and nearby search remain pending. |
+| Google Maps | Postponed | Existing placeholder/native foundation and external links are preserved. Google Maps APIs, search, routes, and directions are intentionally deferred. |
 | Weather | Partial | `/trips/{id}/weather` uses OpenWeather geocoding/5-day forecast when keyed; otherwise returns null values. It is shown in web itinerary and mobile map tab. |
 | Saved/recent trips | Partial | Trip list, open, edit, duplicate, soft-delete, restore, and favorites exist. No separate archive view or continue workflow beyond persisted trip data. |
 | Trip sharing | Partial | Server token and public read-only routes work on web and mobile. Mobile share links use the configured web URL and expose a copy action. No realtime collaboration. |
@@ -88,7 +88,7 @@ All routes are under `/api` and are defined in `backend/server.py`.
 
 - `POST /trips/plan`: validates dates and limits, calls Claude with a fixed JSON prompt, retries once, falls back locally, enriches activity images, and stores an embedded itinerary.
 - `POST /trips/{trip_id}/refine`: refines an existing itinerary with Claude when configured, or a deterministic local fallback.
-- `GET /trips`: protected paginated list of non-deleted owned trips.
+- `GET /trips`: protected paginated list of non-deleted owned trips; optional `search` filters title and destination.
 - `GET /trips/{trip_id}`: protected owned-trip detail.
 - `PUT /trips/{trip_id}`: protected metadata update.
 - `PUT /trips/{trip_id}/itinerary`: protected itinerary replacement; only checks that `days` is a list.
@@ -184,7 +184,7 @@ Mobile trip detail now has a native Google Maps SDK foundation and itinerary mar
 - [ ] Secure production-grade reset delivery; mobile reset flow is implemented.
 - [x] AI refinement endpoint and web/mobile controls; structured output/trusted-place validation remains.
 - [ ] Live hotel, restaurant, attraction discovery.
-- [ ] Interactive Google Maps, directions, nearby search, and route data.
+- [ ] Interactive Google Maps, directions, nearby search, and route data; intentionally postponed.
 - [x] Expense edit endpoint, web control, and client-ID idempotent offline synchronization.
 - [x] Restore deleted trips API and web UI.
 - [x] RAG Travel Assistant backend and React MVP with controlled FAQ answers.
@@ -202,7 +202,7 @@ Mobile trip detail now has a native Google Maps SDK foundation and itinerary mar
 
 ## Last Completed Work
 
-The most recent slice completed Flutter trip-level expenses, itinerary activity editing/refinement, password reset routing/API integration, recently-deleted trip restoration, hotel/restaurant favorites, and expense editing for both remote and offline-queued expenses. Backend regression tests remained green and Flutter widget/focused analysis checks passed.
+The most recent slice completed profile-grounded dashboard destination recommendations on web and Flutter, building on the existing trip search and workspace quick actions. Flutter parity features are already present in code. Backend regression tests, Flutter analysis, and widget tests remain green.
 
 ## Recent Fixes
 

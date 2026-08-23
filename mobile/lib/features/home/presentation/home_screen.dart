@@ -4,15 +4,47 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:travel_os/core/theme/app_theme.dart';
 import 'package:travel_os/features/auth/data/auth_repository.dart';
+import 'package:travel_os/features/profile/data/profile_repository.dart';
 import 'package:travel_os/features/trips/data/trips_repository.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  final _searchController = TextEditingController();
+  List<Trip>? _searchResults;
+  bool _searching = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _searchTrips() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) {
+      setState(() => _searchResults = null);
+      return;
+    }
+    setState(() => _searching = true);
+    final results = await ref.read(tripsRepositoryPrv).getTrips(search: query);
+    if (!mounted) return;
+    setState(() {
+      _searchResults = results;
+      _searching = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authRepositoryPrv);
-    final tripsAsync = ref.watch(userTripsPrv);
+    final tripsAsync = _searchResults == null ? ref.watch(userTripsPrv) : AsyncValue.data(_searchResults!);
+    final profileAsync = ref.watch(userProfilePrv);
     final user = authState.currentUser;
 
     return Scaffold(
@@ -75,6 +107,26 @@ class HomeScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: TextField(
+                    controller: _searchController,
+                    onSubmitted: (_) => _searchTrips(),
+                    decoration: InputDecoration(
+                      hintText: 'Search trips or destinations',
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      suffixIcon: _searching
+                          ? const Padding(padding: EdgeInsets.all(14), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                          : IconButton(onPressed: _searchTrips, icon: const Icon(Icons.arrow_forward_rounded)),
+                    ),
+                  ),
+                ),
+                if (_searchResults != null && _searchResults!.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                    child: Text('No trips match your search.', style: GoogleFonts.dmSans(color: AppTheme.mutedText)),
+                  ),
 
                 // AI Planner Hero CTA Card
                 Padding(
@@ -181,6 +233,16 @@ class HomeScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
+                ),
+
+                _buildQuickActions(context),
+
+                profileAsync.when(
+                  data: (profile) => profile == null || profile.favouriteDestinations.isEmpty
+                      ? const SizedBox.shrink()
+                      : _buildRecommendedDestinations(context, profile.favouriteDestinations),
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
                 ),
 
                 const SizedBox(height: 28),
@@ -380,6 +442,90 @@ class HomeScreen extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActions(BuildContext context) {
+    final actions = [
+      (Icons.add_rounded, 'Plan a trip', 'Create an itinerary', () => context.go('/plan')),
+      (Icons.auto_awesome_rounded, 'AI planner', 'Start with ideas', () => context.go('/plan')),
+      (Icons.calendar_month_rounded, 'Saved trips', 'Browse your plans', () => context.go('/trips')),
+      (Icons.help_outline_rounded, 'Travel OS help', 'Find an answer', () => context.go('/help')),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Your workspace', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: AppTheme.mutedText)),
+          const SizedBox(height: 4),
+          Text('Pick up where you left off', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: actions.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 1.65),
+            itemBuilder: (context, index) {
+              final (icon, title, subtitle, onTap) = actions[index];
+              return InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0x0D000000))),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Icon(icon, color: AppTheme.primary, size: 20),
+                    const Spacer(),
+                    Text(title, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13)),
+                    Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.dmSans(fontSize: 10, color: AppTheme.mutedText)),
+                  ]),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecommendedDestinations(BuildContext context, List<String> destinations) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 28, 0, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('From your profile', style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: AppTheme.mutedText)),
+          const SizedBox(height: 4),
+          Text('Destinations you saved', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 112,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.only(right: 24),
+              itemCount: destinations.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, index) => InkWell(
+                onTap: () => context.go('/plan'),
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  width: 160,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0x0D000000))),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Icon(Icons.place_outlined, color: AppTheme.primary, size: 20),
+                    const Spacer(),
+                    Text(destinations[index], maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14)),
+                    Text('Plan a trip here', style: GoogleFonts.dmSans(fontSize: 10, color: AppTheme.mutedText)),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

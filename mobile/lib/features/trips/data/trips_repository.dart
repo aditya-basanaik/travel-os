@@ -89,11 +89,15 @@ class TripsRepository {
 
   Dio get _dio => _authRepo.apiClient.dio;
 
-  Future<List<Trip>> getTrips({int page = 1, int limit = 12}) async {
+  Future<List<Trip>> getTrips({int page = 1, int limit = 12, String? search}) async {
     try {
       final response = await _dio.get(
         '/trips',
-        queryParameters: {'page': page, 'limit': limit},
+        queryParameters: {
+          'page': page,
+          'limit': limit,
+          if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+        },
       );
       if (response.statusCode == 200 && response.data != null) {
         final items = response.data['items'] as List;

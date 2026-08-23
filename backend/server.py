@@ -1083,8 +1083,19 @@ def trip_out(doc: dict) -> dict:
 
 
 @api_router.get("/trips")
-async def list_trips(user: dict = Depends(get_current_user), page: int = Query(1, ge=1), limit: int = Query(12, ge=1, le=50)):
+async def list_trips(
+    user: dict = Depends(get_current_user),
+    page: int = Query(1, ge=1),
+    limit: int = Query(12, ge=1, le=50),
+    search: Optional[str] = Query(default=None, min_length=1, max_length=120),
+):
     q = {"user_id": user["_id"], "deleted_at": None}
+    if search and search.strip():
+        pattern = re.escape(search.strip())
+        q["$or"] = [
+            {"title": {"$regex": pattern, "$options": "i"}},
+            {"destination": {"$regex": pattern, "$options": "i"}},
+        ]
     total = await db.trips.count_documents(q)
     cursor = db.trips.find(q).sort("created_at", -1).skip((page - 1) * limit).limit(limit)
     items = [trip_out(t) async for t in cursor]

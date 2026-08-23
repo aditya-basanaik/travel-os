@@ -43,11 +43,11 @@ The web API client uses `http://localhost:8001/api` by default and Axios credent
 - AI itinerary refinement now exists at `POST /api/trips/{id}/refine` with web and Flutter controls plus local fallback.
 - No attractions feature.
 - No live hotel/restaurant discovery or trusted inventory validation.
-- No interactive Google Maps, routes, directions, nearby search, current location, markers, distance, or travel time.
+- Maps are intentionally postponed. Existing placeholders and external links remain unchanged.
 - Expense edit endpoint and web/Flutter controls now exist; web and Flutter offline submissions carry client IDs for idempotent retries.
 - Trip restore endpoint and web/Flutter restore UI now exist.
-- Mobile now has reset-password routing, favorites, editable itinerary activities, AI refinement, trip-level expenses, and direct Android Google Sign-In. It still lacks map detail parity and public shared-trip view.
-- Web lacks search, recommendations, nearby places, and separate saved/past trip experiences.
+- Mobile now has reset-password routing, favorites, editable itinerary activities, AI refinement, trip-level expenses, and direct Android Google Sign-In. It still lacks public shared-trip view and dashboard recommendation breadth.
+- Web and Flutter now have trip search, dashboard workspace quick actions, and profile-grounded saved-destination recommendations. Separate saved/past trip experiences remain incomplete.
 - Phone OTP and Apple Sign-In remain deferred.
 
 ## Known Bugs / Risks
@@ -127,7 +127,7 @@ Claude is called server-side through `LlmChat` with a system instruction to retu
 
 ## Current Map Implementation
 
-Maps tabs are being upgraded from placeholder links to a native Google Maps foundation. The trip detail screen now uses the Google Maps SDK when the app is built with a valid key, while keeping a safe fallback state when the key is missing. This preserves the existing experience without blocking startup or breaking older features.
+Maps are postponed by product direction. Keep the current placeholder/native foundation and external links until the dedicated Maps milestone.
 
 Sharing and restore reliability fixes are complete across web and Flutter: mobile parses the backend `{items: [...]}` deleted-trip response, refreshes the deleted list after restore/delete, uses a LAN-capable web URL, and exposes a copy action for generated share links. Web sharing has a clipboard fallback for non-secure LAN contexts, and dashboard list transitions now use layout-aware easing.
 
@@ -140,7 +140,8 @@ The mobile profile page no longer crashes when an existing account has an older 
 - [x] Google OAuth audience mismatch fixed for the mobile client and backend allowlist.
 - [x] Flutter debug APK rebuilt successfully with the corrected client ID and API endpoint.
 - [x] Mobile map foundation updated for the Android SDK without removing the placeholder fallback.
-- [ ] Full route calculation, nearby place discovery, and production map polish remain pending API/provider configuration.
+- [x] Authenticated dashboard trip search, workspace quick actions, and profile-grounded recommendations on web and Flutter.
+- [ ] Maps remain postponed.
 
 ## Last Changes
 
@@ -152,7 +153,7 @@ Continue Milestone 2 maps and trip reliability without changing the existing arc
 
 ## Next Task
 
-Add route/directions behavior and nearby-place discovery to the native map foundation, followed by provider-backed attractions, hotel, and restaurant discovery.
+Add richer saved/recent trip presentation, then strengthen the AI planner and add Maps-ready attractions without implementing Maps.
 
 ## Do Not Touch Without Review
 
