@@ -825,9 +825,13 @@ def generate_local_itinerary(destination: str, start_date: str, end_date: str, b
 
 
 async def call_llm(prompt: str) -> str:
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("EMERGENT_LLM_KEY is not configured")
+
     from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone  # pyright: ignore[reportMissingImports]
     chat = LlmChat(
-        api_key=os.environ["EMERGENT_LLM_KEY"],
+        api_key=api_key,
         session_id=f"plan-{uuid.uuid4()}",
         system_message="You are an expert travel planner. You respond ONLY with valid JSON — no markdown, no commentary.",
     ).with_model("anthropic", "claude-sonnet-4-6")
@@ -898,16 +902,20 @@ Rules:
 - Include 3-5 hotels across price ranges and 4-6 restaurants matching the interests (veg-friendly options if food is an interest).
 - Use real, well-known places in {body.destination} wherever possible."""
 
+    llm_ready = bool(os.environ.get("EMERGENT_LLM_KEY", "").strip())
     itinerary = None
     last_error = None
-    for attempt in range(2):
-        try:
-            raw = await call_llm(prompt)
-            itinerary = parse_itinerary_json(raw)
-            break
-        except Exception as e:
-            last_error = e
-            logger.warning(f"AI itinerary attempt {attempt + 1} failed: {e}")
+    if llm_ready:
+        for attempt in range(2):
+            try:
+                raw = await call_llm(prompt)
+                itinerary = parse_itinerary_json(raw)
+                break
+            except Exception as e:
+                last_error = e
+                logger.warning(f"AI itinerary attempt {attempt + 1} failed: {e}")
+    else:
+        logger.info("EMERGENT_LLM_KEY missing; skipping remote AI generation and using local itinerary fallback")
     if itinerary is None:
         logger.warning(f"Using local itinerary fallback after LLM failure: {last_error}")
         itinerary = generate_local_itinerary(body.destination, body.start_date, body.end_date, body.budget, body.currency, body.people_count, body.interests)

@@ -6,6 +6,10 @@
 
 Travel OS is a user-facing travel planning MVP with a React web app, Flutter app, FastAPI backend, and MongoDB. The implemented vertical slice is email/Google-session auth, profile preferences, AI itinerary creation, persisted trips, web itinerary editing, hotel/restaurant recommendation cards, weather, share links, and expense tracking with limited offline queues. Admin is intentionally not built.
 
+The AI trip planner reliability fix is in place: when `EMERGENT_LLM_KEY` is absent or unusable, the backend skips the remote Claude path and immediately uses the deterministic local itinerary generator. Web and mobile HTTP clients also have bounded timeouts so the UI fails fast instead of leaving a spinner active indefinitely.
+
+A focused non-auth UI polish pass is now in place for the shared app shell and dashboard surfaces. The goal is to improve spacing, card treatments, and color hierarchy while leaving the working auth flow and app behavior unchanged.
+
 ## Current Technology Stack
 
 - React 18 + React Router + Axios + Tailwind/CRACO + Radix + Framer Motion.

@@ -34,6 +34,10 @@ Travel OS is an MVP travel workspace for a signed-in user to create AI-assisted 
 - `mobile/README.md`: still the generic Flutter starter README and does not describe the current mobile features.
 - Root `package-lock.json` exists, but there is no root `package.json`; install/build commands belong to `frontend/` and `backend/`.
 
+## Current UI Polish Pass
+
+The current working state includes a non-auth UI refinement pass across the shared web shell and mobile app theme. This pass adjusts spacing, surface treatment, and visual hierarchy for the already-working product surfaces without changing request logic, auth flows, or backend contracts. The focus is on improving comfort and clarity for real users while preserving all working functionality.
+
 ## Current Features
 
 Status uses `Complete`, `Partial`, `Broken`, `Missing`, or `Unknown` for Phase 1 expectations.
@@ -49,6 +53,7 @@ Status uses `Complete`, `Partial`, `Broken`, `Missing`, or `Unknown` for Phase 1
 | Profile/preferences | Partial | Name, email, photo URL, age, budget, food preference, languages, and favourite destinations exist. No upload, travel style, or broad preference model. |
 | User dashboard/home | Partial | Web and Flutter show greetings, trips, AI planning CTA, authenticated trip/destination search, workspace quick actions, and profile-grounded saved-destination recommendations. Richer saved-trip presentation remains absent. |
 | AI trip planner | Partial | Web/mobile forms call `/api/trips/plan`; Claude JSON generation has a local fallback and Unsplash enrichment. There is no natural-language planner UI, live data grounding, or output validation. |
+| AI trip planner reliability | Complete | Missing `EMERGENT_LLM_KEY` no longer triggers the remote LLM path; the backend immediately falls back to the local itinerary generator and the web/mobile clients now time out quickly instead of waiting indefinitely. |
 | AI itinerary refinement | Partial | Protected `/trips/{id}/refine` uses Claude when configured and a deterministic fallback; web and Flutter controls exist, but refinement has no conversation state. |
 | Day-by-day itinerary | Complete | Generated and displayed on both clients; web and Flutter allow activity editing, add/remove, and persisted itinerary replacement. |
 | Hotels | Partial | AI-generated recommendation cards and Google Maps/Booking.com deep links. No live search/details, distance, reliable prices, or official partner integration. Names/prices may be generated. |

@@ -170,8 +170,8 @@ class TripsRepository {
           'interests': interests,
         },
         options: Options(
-          receiveTimeout: const Duration(seconds: 300),
-          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 45),
+          sendTimeout: const Duration(seconds: 20),
         ),
       );
       if (response.statusCode == 200) {

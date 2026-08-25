@@ -319,6 +319,35 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["itinerary"]["days"][0]["activities"][0]["estimated_cost"], 850)
 
+    async def test_plan_trip_skips_llm_when_no_key_is_configured(self):
+        register = await self.client.post(
+            "/api/auth/register",
+            json={"name": "Planner", "email": "planner-no-llm@example.com", "password": "password123"},
+        )
+        self.assertEqual(register.status_code, 200)
+
+        with patch.dict(os.environ, {"EMERGENT_LLM_KEY": ""}, clear=False):
+            with patch.object(server, "call_llm", new_callable=AsyncMock) as mock_call_llm:
+                response = await self.client.post(
+                    "/api/trips/plan",
+                    json={
+                        "destination": "Goa",
+                        "start_date": "2026-09-01",
+                        "end_date": "2026-09-03",
+                        "budget": 12000,
+                        "currency": "₹",
+                        "people_count": 2,
+                        "interests": ["nature", "food"],
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_call_llm.await_count, 0)
+        payload = response.json()
+        self.assertIn("itinerary", payload)
+        self.assertIn("days", payload["itinerary"])
+        self.assertGreater(len(payload["itinerary"]["days"]), 0)
+
     async def test_expense_client_id_makes_retry_idempotent(self):
         register = await self.client.post(
             "/api/auth/register",

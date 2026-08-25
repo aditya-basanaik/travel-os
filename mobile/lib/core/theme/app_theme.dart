@@ -33,9 +33,10 @@ class AppTheme {
       cardTheme: CardTheme(
         color: cardBg,
         elevation: 0,
+        margin: const EdgeInsets.all(0),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: const BorderSide(color: Color(0x0D000000)), // 5% black border
+          side: const BorderSide(color: Color(0x14000000)),
         ),
       ),
       textTheme: GoogleFonts.dmSansTextTheme(baseTheme.textTheme).copyWith(
@@ -121,6 +122,12 @@ class AppTheme {
         ),
         labelStyle: GoogleFonts.dmSans(color: mutedText),
         floatingLabelStyle: GoogleFonts.dmSans(color: primary),
+      ),
+      dialogTheme: DialogTheme(
+        backgroundColor: cardBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
       ),
     );
   }

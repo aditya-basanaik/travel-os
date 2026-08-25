@@ -53,10 +53,18 @@ flutter build apk --debug \
 
 ## Current milestone status
 
-- Auth and session flow are working.
-- Flutter parity is mostly in place for auth, trip management, expenses, favorites, and itinerary refinement.
-- Milestone 2 map integration is in progress: the mobile trip map now includes a native Google Maps foundation behind a safe fallback, while the placeholder UI remains when the API key is absent.
+- Auth and session flow are stable and intentionally left unchanged during the polish pass.
+- The working trip, planning, dashboard, favorites, expenses, sharing, restore, and help flows remain intact.
+- The AI trip planner now skips the remote Claude call when `EMERGENT_LLM_KEY` is missing and immediately uses the local deterministic itinerary fallback instead of hanging.
+- UI polish is being applied to the core app shell and dashboard surfaces without altering request logic or auth behavior.
+- The mobile trip map remains a safe placeholder/foundation only; Google Maps remains intentionally deferred.
 - Existing features remain intact and are not being replaced wholesale.
+
+## Current polish pass
+
+- Tightened spacing and surface treatment around the main dashboard and app shell.
+- Improved visual hierarchy using the current forest-and-earth palette without changing flows or endpoints.
+- Kept documentation in sync with the current stable state as the app evolves.
 
 ## Project documentation
 

@@ -90,22 +90,22 @@ export default function Dashboard() {
   };
 
   return (
-    <div data-testid="dashboard-page">
-      <div className="flex items-end justify-between mb-8 gap-4">
+    <div data-testid="dashboard-page" className="space-y-8">
+      <div className="flex items-end justify-between mb-2 gap-4">
         <div>
-          <p className="label-overline mb-2">My Trips</p>
-          <h1 className="font-heading font-extrabold text-4xl sm:text-5xl tracking-tight">
+          <p className="label-overline mb-2 text-primary">My Trips</p>
+          <h1 className="font-heading font-extrabold text-4xl sm:text-5xl tracking-tight text-foreground">
             Hey {user?.name?.split(" ")[0]},<br />where to next?
           </h1>
         </div>
-        <Button asChild data-testid="create-trip-btn" className="rounded-full bg-primary text-white font-bold h-12 px-6 tap-scale shrink-0">
+        <Button asChild data-testid="create-trip-btn" className="rounded-full bg-primary text-white font-bold h-12 px-6 tap-scale shrink-0 shadow-md shadow-primary/20">
           <Link to="/plan"><Plus size={18} weight="bold" className="mr-1" /> Plan a trip</Link>
         </Button>
       </div>
 
       {error && <p className="text-destructive font-medium mb-6" data-testid="trips-error">{error}</p>}
 
-      <form onSubmit={submitSearch} className="mb-8 flex gap-2 max-w-xl" data-testid="trip-search-form">
+      <form onSubmit={submitSearch} className="mb-2 flex gap-2 max-w-xl" data-testid="trip-search-form">
         <label className="relative flex-1">
           <MagnifyingGlass size={18} className="absolute left-3 top-3 text-muted-foreground" />
           <input
@@ -113,11 +113,11 @@ export default function Dashboard() {
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search trips or destinations"
             aria-label="Search trips or destinations"
-            className="w-full rounded-2xl border border-border bg-white py-2.5 pl-10 pr-10 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full rounded-2xl border border-[#e6dfd3] bg-white/90 py-2.5 pl-10 pr-10 text-sm outline-none focus:ring-2 focus:ring-primary/30 shadow-sm"
           />
           {search && <button type="button" onClick={() => { setSearch(""); setActiveSearch(""); load(""); }} className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground" aria-label="Clear trip search"><X size={18} /></button>}
         </label>
-        <Button type="submit" className="rounded-2xl bg-primary text-white font-bold" data-testid="trip-search-btn"><MagnifyingGlass size={17} className="mr-1" /> Search</Button>
+        <Button type="submit" className="rounded-2xl bg-primary text-white font-bold shadow-md shadow-primary/20" data-testid="trip-search-btn"><MagnifyingGlass size={17} className="mr-1" /> Search</Button>
       </form>
 
       {activeSearch && trips?.length === 0 && <p className="text-sm text-muted-foreground mb-6">No trips match “{activeSearch}”.</p>}
@@ -125,8 +125,8 @@ export default function Dashboard() {
       <section className="mb-10" aria-label="Quick actions" data-testid="quick-actions">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="label-overline mb-1">Your workspace</p>
-            <h2 className="font-heading font-bold text-xl">Pick up where you left off</h2>
+            <p className="label-overline mb-1 text-primary">Your workspace</p>
+            <h2 className="font-heading font-bold text-xl text-foreground">Pick up where you left off</h2>
           </div>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -136,9 +136,9 @@ export default function Dashboard() {
             { to: "/trips", label: "Saved trips", hint: "Browse your plans", icon: CalendarBlank },
             { to: "/help", label: "Travel OS help", hint: "Find an answer", icon: Question },
           ].map(({ to, label, hint, icon: Icon }) => (
-            <Link key={label} to={to} className="group rounded-2xl border border-border bg-white p-4 shadow-soft transition-transform hover:-translate-y-0.5" data-testid={`quick-action-${label.toLowerCase().replaceAll(" ", "-")}`}>
+            <Link key={label} to={to} className="group rounded-[24px] border border-[#e6dfd3] bg-white/90 p-4 shadow-[0_10px_25px_rgba(22,101,52,0.04)] transition-all hover:-translate-y-0.5 hover:border-[#d7cfc2]" data-testid={`quick-action-${label.toLowerCase().replaceAll(" ", "-")}`}>
               <Icon size={20} weight="duotone" className="text-primary mb-3" />
-              <p className="font-heading font-bold text-sm">{label}</p>
+              <p className="font-heading font-bold text-sm text-foreground">{label}</p>
               <p className="text-xs text-muted-foreground mt-1">{hint}</p>
             </Link>
           ))}
@@ -147,13 +147,13 @@ export default function Dashboard() {
 
       {profile?.favourite_destinations?.length > 0 && (
         <section className="mb-10" data-testid="recommended-destinations">
-          <p className="label-overline mb-1">From your profile</p>
-          <h2 className="font-heading font-bold text-xl mb-4">Destinations you saved</h2>
+          <p className="label-overline mb-1 text-primary">From your profile</p>
+          <h2 className="font-heading font-bold text-xl mb-4 text-foreground">Destinations you saved</h2>
           <div className="flex gap-3 overflow-x-auto pb-2">
             {profile.favourite_destinations.map((destination) => (
-              <Link key={destination} to="/plan" className="min-w-48 rounded-2xl border border-border bg-white p-4 shadow-soft hover:-translate-y-0.5 transition-transform">
+              <Link key={destination} to="/plan" className="min-w-48 rounded-[24px] border border-[#e6dfd3] bg-white/90 p-4 shadow-[0_10px_25px_rgba(22,101,52,0.04)] hover:-translate-y-0.5 transition-transform">
                 <MapPin size={20} weight="duotone" className="text-primary mb-4" />
-                <p className="font-heading font-bold truncate">{destination}</p>
+                <p className="font-heading font-bold truncate text-foreground">{destination}</p>
                 <p className="text-xs text-muted-foreground mt-1">Plan a trip here</p>
               </Link>
             ))}
@@ -180,7 +180,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="trips-grid">
           {trips.map((t, i) => (
             <motion.div key={t.id} layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04, duration: 0.35, ease: "easeOut" }}
-              className="card-lift relative rounded-3xl overflow-hidden bg-white shadow-soft cursor-pointer"
+              className="card-lift relative rounded-[28px] overflow-hidden bg-white/95 shadow-[0_18px_42px_rgba(22,101,52,0.06)] cursor-pointer border border-[#efe7dc]"
               data-testid={`trip-card-${t.id}`} onClick={() => navigate(`/trips/${t.id}`)}>
               <div className="relative h-44">
                 <img src={t.cover_image} alt={`${t.destination} cover`} loading="lazy" className="w-full h-full object-cover" />
@@ -191,9 +191,9 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="p-4 flex items-center justify-between gap-2">
-                <div className="text-sm text-muted-foreground space-y-1">
-                  <p className="flex items-center gap-1.5"><CalendarBlank size={15} /> {fmtDate(t.start_date)} – {fmtDate(t.end_date)}</p>
-                  <p className="flex items-center gap-1.5"><Users size={15} /> {t.people_count} {t.people_count === 1 ? "traveller" : "travellers"} · {t.currency}{t.budget.toLocaleString()}</p>
+                <div className="text-sm text-muted-foreground space-y-1.5">
+                  <p className="flex items-center gap-1.5"><CalendarBlank size={15} className="text-primary" /> {fmtDate(t.start_date)} – {fmtDate(t.end_date)}</p>
+                  <p className="flex items-center gap-1.5"><Users size={15} className="text-primary" /> {t.people_count} {t.people_count === 1 ? "traveller" : "travellers"} · {t.currency}{t.budget.toLocaleString()}</p>
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -223,7 +223,7 @@ export default function Dashboard() {
           </div>
           <div className="space-y-3">
             {deletedTrips.map((trip) => (
-              <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: "easeOut" }} key={trip.id} className="bg-white rounded-3xl shadow-soft px-5 py-4 flex flex-wrap items-center gap-3" data-testid={`deleted-trip-${trip.id}`}>
+              <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: "easeOut" }} key={trip.id} className="bg-white/95 rounded-[26px] border border-[#eae1d6] shadow-[0_14px_32px_rgba(22,101,52,0.04)] px-5 py-4 flex flex-wrap items-center gap-3" data-testid={`deleted-trip-${trip.id}`}>
                 <div className="flex-1 min-w-0">
                   <p className="font-heading font-bold truncate">{trip.title}</p>
                   <p className="text-sm text-muted-foreground">{trip.destination} · deleted {fmtDate(trip.deleted_at)}</p>
