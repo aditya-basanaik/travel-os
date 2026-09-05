@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import api, { fmtErr } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -13,14 +13,58 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const googleButtonRef = useRef(null);
   
   const { setUser } = useAuth();
   const navigate = useNavigate();
 
-  const handleGoogleLogin = () => {
-    const origin = window.location.origin;
-    window.location.href = `https://auth.emergentagent.com/?redirect=${origin}/auth/callback`;
+  const handleGoogleCredential = async (response) => {
+    setError("");
+    setLoading(true);
+    try {
+      const { data } = await api.post("/auth/google/token", { id_token: response.credential });
+      setUser(data);
+      navigate("/", { replace: true });
+    } catch (err) {
+      setError(fmtErr(err));
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+    if (!clientId || !googleButtonRef.current) return undefined;
+
+    const renderGoogleButton = () => {
+      if (!window.google?.accounts?.id || !googleButtonRef.current) return;
+      googleButtonRef.current.replaceChildren();
+      window.google.accounts.id.initialize({ client_id: clientId, callback: handleGoogleCredential });
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        text: "continue_with",
+        shape: "pill",
+        width: 360,
+      });
+    };
+
+    const existingScript = document.getElementById("google-gsi-script");
+    if (existingScript) {
+      renderGoogleButton();
+      return undefined;
+    }
+
+    const script = document.createElement("script");
+    script.id = "google-gsi-script";
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = renderGoogleButton;
+    document.head.appendChild(script);
+    return undefined;
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -137,21 +181,14 @@ export default function AuthPage() {
           <div className="flex-grow border-t border-border"></div>
         </div>
 
-        {/* Google OAuth button */}
-        <Button
-          type="button"
-          onClick={handleGoogleLogin}
-          data-testid="google-signin-button"
-          className="w-full h-12 rounded-full border border-border bg-white text-foreground hover:bg-secondary/30 font-semibold flex items-center justify-center gap-3 tap-scale"
-        >
-          <svg className="w-5 h-5" viewBox="0 0 24 24">
-            <path
-              fill="#EA4335"
-              d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114A5.99 5.99 0 0 1 8 12.5a5.99 5.99 0 0 1 5.991-6.014c1.49 0 2.87.525 3.961 1.488l3.1-3.1C19.167 3.125 16.7 2 13.991 2 8.473 2 4 6.473 4 12s4.473 10 9.991 10c5.782 0 9.618-4.062 9.618-9.782 0-.693-.075-1.3-.23-1.933H12.24z"
-            />
-          </svg>
-          Google
-        </Button>
+        {/* Direct Google Identity Services button */}
+        {process.env.REACT_APP_GOOGLE_CLIENT_ID ? (
+          <div ref={googleButtonRef} className="min-h-10 flex justify-center" data-testid="google-signin-button" />
+        ) : (
+          <p className="text-center text-xs text-muted-foreground" data-testid="google-config-error">
+            Google login is not configured for this web build.
+          </p>
+        )}
 
         {/* Toggle Option */}
         <div className="text-center mt-8 text-sm">

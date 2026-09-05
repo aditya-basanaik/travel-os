@@ -28,9 +28,9 @@ The web API client uses `http://localhost:8001/api` by default and Axios credent
 ## Completed Features
 
 - Email register/login/logout/me/refresh.
-- Emergent-managed Google OAuth session exchange remains on web; Flutter Android uses Google Sign-In and sends an ID token to `/auth/google/token`. Direct Android login requires configured Google OAuth client IDs.
+- Web and Flutter use direct Google ID-token authentication through `/auth/google/token`. The web client requires `REACT_APP_GOOGLE_CLIENT_ID`, matching `GOOGLE_OAUTH_CLIENT_IDS`, and published Google OAuth consent configuration for unrestricted accounts.
 - bcrypt passwords and failed-login lockout.
-- Forgot-password token creation and web reset form, development-only link delivery.
+- Forgot-password token creation and web reset form, with development-only link delivery and an SMTP-backed production provider abstraction.
 - Profile name, photo URL, age, budget preference, food preference, languages, favourite destinations.
 - AI plan form on web/mobile; Claude JSON request, one retry, deterministic local fallback, persisted trip.
 - Activity image enrichment and curated cover fallback.
@@ -45,7 +45,7 @@ The web API client uses `http://localhost:8001/api` by default and Axios credent
 
 - RAG Travel Assistant backend plus React and Flutter MVPs now exist; persistent/vector retrieval and chat history remain incomplete.
 - AI itinerary refinement now exists at `POST /api/trips/{id}/refine` with web and Flutter controls plus local fallback.
-- No attractions feature.
+- Attractions now exist as generated itinerary recommendations with web/mobile tabs and persistent favorites; live provider-backed discovery remains incomplete.
 - No live hotel/restaurant discovery or trusted inventory validation.
 - Maps are intentionally postponed. Existing placeholders and external links remain unchanged.
 - Expense edit endpoint and web/Flutter controls now exist; web and Flutter offline submissions carry client IDs for idempotent retries.
@@ -60,8 +60,8 @@ The web API client uses `http://localhost:8001/api` by default and Axios credent
 2. Flutter share URLs use `TRAVEL_OS_WEB_URL` (LAN default `http://172.19.47.12:3000`) and `/shared/{token}`; the mobile dialog has a copy action and shared-owner mapping. Set the define for deployed/mobile builds.
 3. `mobile/test/widget_test.dart` now exercises the login screen without live auth networking; rerun it from `mobile/` to confirm the final isolated version.
 4. Offline amounts are not included in server summaries until synchronization.
-5. AI output validation is only JSON shape plus non-empty days; generated place/pricing claims are untrusted.
-6. Password reset returns/logs reset tokens because SMTP is not configured.
+5. AI planner output now validates required structure, dates, costs, ratings, duplicate activities, attraction location shape, and budget totals; generated place/pricing claims remain untrusted.
+6. Production password-reset delivery requires SMTP configuration; development mode alone returns a local reset link.
 7. Backend returns JWT strings in auth JSON in addition to cookies.
 8. Mobile has a hardcoded LAN IP for non-web API access.
 9. Backend has 15 unit/ASGI tests and all pass; no React test files were found. The Flutter widget test passes. Full Flutter analysis still reports existing warnings/deprecations.
@@ -153,11 +153,11 @@ The Git history contains one initial project setup commit (`5ac8e1d`, 2026-08-16
 
 ## Current Task
 
-Continue Milestone 2 maps and trip reliability without changing the existing architecture.
+Continue Phase 1 AI and saved-trip work without changing the existing architecture. Natural-language planning now routes through the validated structured planner.
 
 ## Next Task
 
-Add richer saved/recent trip presentation, then strengthen the AI planner and add Maps-ready attractions without implementing Maps.
+Add richer saved/recent trip presentation, then improve discovery/provider data without implementing Maps.
 
 ## Do Not Touch Without Review
 

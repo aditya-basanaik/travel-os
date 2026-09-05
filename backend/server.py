@@ -10,6 +10,9 @@ import uuid
 import asyncio
 import secrets
 import logging
+import math
+import smtplib
+from email.message import EmailMessage
 from datetime import datetime, timezone, timedelta
 from typing import Annotated, Optional, List
 
@@ -39,6 +42,50 @@ CORS_ORIGINS = [
     for origin in os.environ.get("CORS_ORIGINS", os.environ.get("FRONTEND_URL", "")).split(",")
     if origin.strip()
 ]
+
+
+class PasswordResetDeliveryError(RuntimeError):
+    pass
+
+
+class SmtpPasswordResetProvider:
+    def __init__(self):
+        self.host = os.environ.get("SMTP_HOST", "").strip()
+        try:
+            self.port = int(os.environ.get("SMTP_PORT", "587"))
+        except ValueError as error:
+            raise PasswordResetDeliveryError("SMTP_PORT must be a valid integer") from error
+        self.username = os.environ.get("SMTP_USERNAME", "").strip()
+        self.password = os.environ.get("SMTP_PASSWORD", "")
+        self.sender = os.environ.get("RESET_EMAIL_FROM", "").strip()
+        if not all((self.host, self.username, self.password, self.sender)):
+            raise PasswordResetDeliveryError("SMTP password reset delivery is not configured")
+
+    async def send(self, recipient: str, link: str):
+        message = EmailMessage()
+        message["Subject"] = "Reset your Travel OS password"
+        message["From"] = self.sender
+        message["To"] = recipient
+        message.set_content(
+            "Use the following link to reset your Travel OS password. "
+            "This link expires in one hour and can only be used once:\n\n"
+            f"{link}"
+        )
+
+        def deliver():
+            with smtplib.SMTP(self.host, self.port, timeout=10) as smtp:
+                smtp.starttls()
+                smtp.login(self.username, self.password)
+                smtp.send_message(message)
+
+        try:
+            await asyncio.to_thread(deliver)
+        except (OSError, smtplib.SMTPException) as error:
+            raise PasswordResetDeliveryError("Unable to send password reset email") from error
+
+
+def get_password_reset_provider():
+    return SmtpPasswordResetProvider()
 
 PyObjectId = Annotated[str, BeforeValidator(lambda v: str(v) if isinstance(v, ObjectId) else str(v))]
 
@@ -172,6 +219,10 @@ class PlanRequest(BaseModel):
     currency: str = "₹"
     people_count: int = Field(default=1, ge=1, le=30)
     interests: List[str] = []
+
+
+class NaturalPlanRequest(BaseModel):
+    request: str = Field(min_length=10, max_length=1000)
 
 
 class TripUpdate(BaseModel):
@@ -446,8 +497,15 @@ async def forgot_password(body: ForgotIn):
             "expires_at": utcnow() + timedelta(hours=1), "created_at": utcnow(),
         })
         link = f"{os.environ.get('FRONTEND_URL', '')}/reset-password?token={token}"
-        logger.info(f"Password reset link for {email}: {link}")
-        result["dev_reset_link"] = link
+        if IS_PROD:
+            try:
+                await get_password_reset_provider().send(email, link)
+            except PasswordResetDeliveryError:
+                await db.password_reset_tokens.delete_one({"token": token})
+                logger.exception("Password reset delivery failed")
+        else:
+            logger.info("Development password reset link generated for %s", email)
+            result["dev_reset_link"] = link
     return result
 
 
@@ -803,12 +861,32 @@ def generate_local_itinerary(destination: str, start_date: str, end_date: str, b
         },
     ]
 
+    attractions = [
+        {
+            "name": f"{destination} Heritage Walk",
+            "description": "A flexible introduction to the destination's history and local character.",
+            "category": "culture",
+            "estimated_cost": round(activities_cost * 0.18, 0),
+            "recommended_duration": "2-3 hours",
+            "location": {"latitude": None, "longitude": None},
+        },
+        {
+            "name": f"{destination} Scenic Viewpoint",
+            "description": "A relaxed scenic stop suited to photography and an unhurried afternoon.",
+            "category": "nature",
+            "estimated_cost": round(activities_cost * 0.12, 0),
+            "recommended_duration": "1-2 hours",
+            "location": {"latitude": None, "longitude": None},
+        },
+    ]
+
     return {
         "title": f"{destination} getaway",
         "summary": summary,
         "days": days,
         "hotels": hotels,
         "restaurants": restaurants,
+        "attractions": attractions,
         "cost_breakdown": {
             "stay": stay,
             "food": food,
@@ -858,6 +936,173 @@ def parse_itinerary_json(text: str) -> dict:
     return data
 
 
+def validate_planned_itinerary(data: dict, expected_days: int, start_date: str, budget: float) -> dict:
+    if not isinstance(data, dict):
+        raise ValueError("Itinerary must be an object")
+    for field in ("title", "summary", "days", "hotels", "restaurants", "attractions", "cost_breakdown", "tips"):
+        if field not in data:
+            raise ValueError(f"Itinerary is missing {field}")
+    if not isinstance(data["title"], str) or not data["title"].strip():
+        raise ValueError("Itinerary title is required")
+    if not isinstance(data["summary"], str) or not data["summary"].strip():
+        raise ValueError("Itinerary summary is required")
+    if not isinstance(data["days"], list) or len(data["days"]) != expected_days:
+        raise ValueError("Itinerary has an invalid number of days")
+
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    for index, day in enumerate(data["days"], start=1):
+        if not isinstance(day, dict) or day.get("day_number") != index:
+            raise ValueError("Itinerary day numbers must be sequential")
+        expected_date = (start + timedelta(days=index - 1)).strftime("%Y-%m-%d")
+        if day.get("date") != expected_date:
+            raise ValueError("Itinerary dates do not match the requested trip")
+        activities = day.get("activities")
+        if not isinstance(activities, list) or not 1 <= len(activities) <= 8:
+            raise ValueError("Each itinerary day must contain activities")
+        titles = set()
+        for activity in activities:
+            if not isinstance(activity, dict) or not isinstance(activity.get("title"), str) or not activity["title"].strip():
+                raise ValueError("Every activity needs a title")
+            title = activity["title"].strip().lower()
+            if title in titles:
+                raise ValueError("Duplicate activities are not allowed on a day")
+            titles.add(title)
+            if not isinstance(activity.get("description"), str) or not activity["description"].strip():
+                raise ValueError("Every activity needs a description")
+            cost = activity.get("estimated_cost", 0)
+            if isinstance(cost, bool) or not isinstance(cost, (int, float)) or not math.isfinite(float(cost)) or cost < 0:
+                raise ValueError("Activity costs must be nonnegative numbers")
+
+    for section in ("hotels", "restaurants", "attractions"):
+        if not isinstance(data[section], list):
+            raise ValueError(f"{section} must be a list")
+        for item in data[section]:
+            if not isinstance(item, dict) or not isinstance(item.get("name"), str) or not item["name"].strip():
+                raise ValueError(f"Every {section[:-1]} needs a name")
+            if "description" in item and item["description"] is not None and not isinstance(item["description"], str):
+                raise ValueError(f"{section[:-1]} descriptions must be text")
+            for number_field in ("price_per_night", "estimated_cost", "rating"):
+                if number_field not in item or item[number_field] is None:
+                    continue
+                value = item[number_field]
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)) or value < 0:
+                    raise ValueError(f"{section[:-1]} {number_field} must be nonnegative")
+            if item.get("rating") is not None and item["rating"] > 5:
+                raise ValueError(f"{section[:-1]} rating cannot exceed 5")
+
+    for attraction in data["attractions"]:
+        location = attraction.setdefault("location", {})
+        if not isinstance(location, dict):
+            raise ValueError("Attraction location must be an object")
+        for field in ("latitude", "longitude", "place_id", "address", "city", "country"):
+            location.setdefault(field, None)
+
+    breakdown = data["cost_breakdown"]
+    if not isinstance(breakdown, dict):
+        raise ValueError("Cost breakdown must be an object")
+    total = 0.0
+    for category, value in breakdown.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)) or value < 0:
+            raise ValueError(f"Cost breakdown value for {category} must be nonnegative")
+        total += float(value)
+    if total > budget * 1.05:
+        raise ValueError("Itinerary cost exceeds the requested budget")
+    if not isinstance(data["tips"], list) or not all(isinstance(tip, str) and tip.strip() for tip in data["tips"]):
+        raise ValueError("Itinerary tips must be text")
+    return data
+
+
+NUMBER_WORDS = {
+    "one": 1, "a": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+}
+
+
+def parse_natural_plan_request(text: str) -> PlanRequest:
+    request = " ".join(text.strip().split())
+    lowered = request.lower()
+    duration_match = re.search(r"\b(\d{1,2})\s*[- ]?day\b", lowered)
+    if duration_match:
+        duration = int(duration_match.group(1))
+    elif re.search(r"\bweekend\b", lowered):
+        duration = 2
+    else:
+        duration = None
+
+    budget_match = re.search(
+        r"(?:under|below|within|budget(?:\s+of)?|₹|rs\.?|inr|\$|usd|€|eur|£|gbp)\s*([0-9][0-9,]*(?:\.[0-9]+)?)",
+        lowered,
+    )
+    budget = float(budget_match.group(1).replace(",", "")) if budget_match else None
+    if "₹" in request or re.search(r"\b(?:rs\.?|inr)\b", lowered):
+        currency = "₹"
+    elif "$" in request or re.search(r"\busd\b", lowered):
+        currency = "$"
+    elif "€" in request or re.search(r"\beur\b", lowered):
+        currency = "€"
+    elif "£" in request or re.search(r"\bgbp\b", lowered):
+        currency = "£"
+    else:
+        currency = "₹"
+
+    people_match = re.search(r"\bfor\s+(\d{1,2})\s+(?:people|persons|travellers|travelers)\b", lowered)
+    people_count = int(people_match.group(1)) if people_match else None
+    if people_count is None:
+        for word, value in NUMBER_WORDS.items():
+            if re.search(rf"\bfor\s+{word}\s+(?:people|persons|travellers|travelers)\b", lowered):
+                people_count = value
+                break
+    people_count = people_count or 1
+
+    destination = None
+    destination_match = re.search(
+        r"\b(?:near|around|to|in)\s+([A-Za-z][A-Za-z .'-]{1,79}?)(?=\s+(?:under|below|within|for\s+\d|for\s+(?:one|two|three|four|five|six|seven|eight|nine|ten)|with|that|and\s+(?:i|we)|i\s+(?:like|love)|from)\b|[,.!?]|$)",
+        request,
+        re.IGNORECASE,
+    )
+    if destination_match:
+        destination = destination_match.group(1).strip()
+
+    if not destination:
+        raise ValueError("Please include a destination, such as Goa or near Bangalore")
+    if duration is None or not 1 <= duration <= 30:
+        raise ValueError("Please include a trip duration from 1 to 30 days")
+    if budget is None or budget <= 0:
+        raise ValueError("Please include a positive budget, such as under ₹12,000")
+    if people_count > 30:
+        raise ValueError("Travel groups can include at most 30 people")
+
+    interest_terms = (
+        "nature", "waterfalls", "adventure", "beach", "beaches", "mountains", "culture", "history",
+        "food", "vegetarian", "vegan", "jain", "shopping", "nightlife", "relaxing", "peaceful", "photography",
+    )
+    interests = []
+    for term in interest_terms:
+        if re.search(rf"\b{re.escape(term)}\b", lowered) and term not in interests:
+            interests.append(term)
+    if any(term in interests for term in ("vegetarian", "vegan", "jain")) and "food" not in interests:
+        interests.append("food")
+
+    start_date = utcnow().date()
+    explicit_start = re.search(r"\b(?:starting|from)\s+(\d{4}-\d{2}-\d{2})\b", lowered)
+    if explicit_start:
+        try:
+            start_date = datetime.strptime(explicit_start.group(1), "%Y-%m-%d").date()
+        except ValueError as error:
+            raise ValueError("The start date must use YYYY-MM-DD format") from error
+    end_date = start_date + timedelta(days=duration - 1)
+
+    return PlanRequest(
+        destination=destination,
+        start_date=start_date.isoformat(),
+        end_date=end_date.isoformat(),
+        budget=budget,
+        currency=currency,
+        people_count=people_count,
+        interests=interests,
+    )
+
+
 @api_router.post("/trips/plan")
 async def plan_trip(body: PlanRequest, user: dict = Depends(get_current_user)):
     try:
@@ -891,7 +1136,8 @@ Return ONLY a JSON object with this exact schema:
     }}
   ],
   "hotels": [{{"name": "...", "area": "...", "price_per_night": 0, "rating": 4.2, "amenities": ["..."], "description": "1 sentence"}}],
-  "restaurants": [{{"name": "...", "cuisine": "...", "price_level": 1, "rating": 4.3, "veg_friendly": true, "description": "1 sentence"}}],
+    "restaurants": [{{"name": "...", "cuisine": "...", "price_level": 1, "rating": 4.3, "veg_friendly": true, "description": "1 sentence"}}],
+    "attractions": [{{"name": "...", "description": "1 sentence", "destination": "{body.destination}", "category": "nature|culture|adventure|shopping|wellness", "estimated_cost": 0, "recommended_duration": "2 hours", "image": null, "location": {{"latitude": null, "longitude": null}}}}],
   "cost_breakdown": {{"stay": 0, "food": 0, "transport": 0, "activities": 0, "misc": 0}},
   "tips": ["practical tip 1", "tip 2", "tip 3"]
 }}
@@ -909,7 +1155,7 @@ Rules:
         for attempt in range(2):
             try:
                 raw = await call_llm(prompt)
-                itinerary = parse_itinerary_json(raw)
+                itinerary = validate_planned_itinerary(parse_itinerary_json(raw), nights + 1, body.start_date, body.budget)
                 break
             except Exception as e:
                 last_error = e
@@ -918,7 +1164,14 @@ Rules:
         logger.info("EMERGENT_LLM_KEY missing; skipping remote AI generation and using local itinerary fallback")
     if itinerary is None:
         logger.warning(f"Using local itinerary fallback after LLM failure: {last_error}")
-        itinerary = generate_local_itinerary(body.destination, body.start_date, body.end_date, body.budget, body.currency, body.people_count, body.interests)
+        itinerary = validate_planned_itinerary(
+            generate_local_itinerary(body.destination, body.start_date, body.end_date, body.budget, body.currency, body.people_count, body.interests),
+            nights + 1,
+            body.start_date,
+            body.budget,
+        )
+
+    itinerary.setdefault("attractions", [])
 
     # Enrich activities with image URLs (per-request cache to avoid duplicate Unsplash calls)
     try:
@@ -1022,6 +1275,15 @@ Rules:
     await db.trips.insert_one(trip.to_mongo())
     result = trip.model_dump()
     return result
+
+
+@api_router.post("/trips/plan/natural")
+async def plan_trip_naturally(body: NaturalPlanRequest, user: dict = Depends(get_current_user)):
+    try:
+        structured = parse_natural_plan_request(body.request)
+    except ValueError as error:
+        raise HTTPException(422, str(error))
+    return await plan_trip(structured, user)
 
 
 def local_refine_itinerary(itinerary: dict, instruction: str) -> dict:
@@ -1296,8 +1558,8 @@ async def list_favorites(trip_id: str, user: dict = Depends(get_current_user)):
 @api_router.post("/trips/{trip_id}/favorites")
 async def add_favorite(trip_id: str, body: FavoriteIn, user: dict = Depends(get_current_user)):
     await get_owned_trip(trip_id, user)
-    if body.type not in ("hotel", "restaurant"):
-        raise HTTPException(400, "Type must be hotel or restaurant")
+    if body.type not in ("hotel", "restaurant", "attraction"):
+        raise HTTPException(400, "Type must be hotel, restaurant, or attraction")
     existing = await db.favorites.find_one({"user_id": user["_id"], "trip_id": trip_id, "type": body.type, "name": body.name})
     if existing:
         existing["id"] = str(existing.pop("_id"))

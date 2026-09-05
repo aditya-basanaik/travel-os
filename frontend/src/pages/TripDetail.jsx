@@ -121,12 +121,14 @@ export default function TripDetail() {
           <TabsTrigger value="itinerary" data-testid="tab-itinerary" className="rounded-full data-[state=active]:bg-primary data-[state=active]:text-white px-5 py-2.5">Itinerary</TabsTrigger>
           <TabsTrigger value="hotels" data-testid="tab-hotels" className="rounded-full data-[state=active]:bg-primary data-[state=active]:text-white px-5 py-2.5">Hotels</TabsTrigger>
           <TabsTrigger value="restaurants" data-testid="tab-restaurants" className="rounded-full data-[state=active]:bg-primary data-[state=active]:text-white px-5 py-2.5">Restaurants</TabsTrigger>
+          <TabsTrigger value="attractions" data-testid="tab-attractions" className="rounded-full data-[state=active]:bg-primary data-[state=active]:text-white px-5 py-2.5">Attractions</TabsTrigger>
           <TabsTrigger value="map" data-testid="tab-map" className="rounded-full data-[state=active]:bg-primary data-[state=active]:text-white px-5 py-2.5">Map</TabsTrigger>
           <TabsTrigger value="expenses" data-testid="tab-expenses" className="rounded-full data-[state=active]:bg-primary data-[state=active]:text-white px-5 py-2.5">Expenses</TabsTrigger>
         </TabsList>
         <TabsContent value="itinerary"><ItineraryTab trip={trip} onUpdate={setTrip} /></TabsContent>
         <TabsContent value="hotels"><PlacesTab trip={trip} type="hotel" /></TabsContent>
         <TabsContent value="restaurants"><PlacesTab trip={trip} type="restaurant" /></TabsContent>
+        <TabsContent value="attractions"><PlacesTab trip={trip} type="attraction" /></TabsContent>
         <TabsContent value="map"><MapTab trip={trip} /></TabsContent>
         <TabsContent value="expenses"><ExpensesTab trip={trip} /></TabsContent>
       </Tabs>

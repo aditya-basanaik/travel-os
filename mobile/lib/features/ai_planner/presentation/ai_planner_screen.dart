@@ -17,6 +17,7 @@ class _AIPlannerScreenState extends ConsumerState<AIPlannerScreen> {
   final _formKey = GlobalKey<FormState>();
   final _destinationController = TextEditingController();
   final _budgetController = TextEditingController(text: '25000');
+  final _naturalRequestController = TextEditingController();
   
   DateTime? _startDate;
   DateTime? _endDate;
@@ -40,6 +41,7 @@ class _AIPlannerScreenState extends ConsumerState<AIPlannerScreen> {
   void dispose() {
     _destinationController.dispose();
     _budgetController.dispose();
+    _naturalRequestController.dispose();
     super.dispose();
   }
 
@@ -117,6 +119,28 @@ class _AIPlannerScreenState extends ConsumerState<AIPlannerScreen> {
     }
   }
 
+  Future<void> _submitNatural() async {
+    final request = _naturalRequestController.text.trim();
+    if (request.length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Describe your trip in a little more detail.')),
+      );
+      return;
+    }
+    setState(() => _isGenerating = true);
+    final trip = await ref.read(tripsRepositoryPrv).planTripNaturally(request);
+    if (!mounted) return;
+    setState(() => _isGenerating = false);
+    if (trip != null) {
+      ref.refresh(userTripsPrv);
+      context.go('/trips/${trip.id}');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not understand that trip request.'), backgroundColor: AppTheme.accent),
+      );
+    }
+  }
+
   void _toggleInterest(String interest) {
     setState(() {
       if (_selectedInterests.contains(interest)) {
@@ -155,6 +179,41 @@ class _AIPlannerScreenState extends ConsumerState<AIPlannerScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 20),
+
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.secondary.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Plan from a description',
+                      style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.foreground),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Try: A peaceful 3-day trip near Bangalore under ₹12,000 for two.',
+                      style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.mutedText),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _naturalRequestController,
+                      minLines: 3,
+                      maxLines: 5,
+                      decoration: const InputDecoration(hintText: 'Tell us about the trip you want...'),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: _submitNatural,
+                      child: const Text('Plan from description'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 28),
               
               // Intro
               Text(

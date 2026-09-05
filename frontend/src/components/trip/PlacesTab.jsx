@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { Star, Heart, MapPin, ArrowSquareOut, Bed, ForkKnife } from "@phosphor-icons/react";
+import { Star, Heart, MapPin, ArrowSquareOut, Bed, ForkKnife, Binoculars } from "@phosphor-icons/react";
 import api, { fmtErr } from "@/lib/api";
 import { mapsUrl } from "@/components/trip/ItineraryTab";
 
 const bookingUrl = (name, dest) => `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(`${name} ${dest}`)}`;
 
 export default function PlacesTab({ trip, type }) {
-  const items = (trip.itinerary?.[type === "hotel" ? "hotels" : "restaurants"]) || [];
+  const listKey = type === "hotel" ? "hotels" : type === "restaurant" ? "restaurants" : "attractions";
+  const items = trip.itinerary?.[listKey] || [];
   const [favs, setFavs] = useState([]);
 
   useEffect(() => {
@@ -35,7 +36,7 @@ export default function PlacesTab({ trip, type }) {
   if (items.length === 0) {
     return (
       <div className="bg-secondary/60 rounded-3xl p-10 text-center" data-testid={`${type}s-empty`}>
-        <p className="text-muted-foreground">No {type === "hotel" ? "hotel" : "restaurant"} recommendations on this trip yet.</p>
+        <p className="text-muted-foreground">No {type === "hotel" ? "hotel" : type === "restaurant" ? "restaurant" : "attraction"} recommendations on this trip yet.</p>
       </div>
     );
   }
@@ -43,7 +44,7 @@ export default function PlacesTab({ trip, type }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6" data-testid={`${type}s-list`}>
       {items.map((item, i) => {
-        const Icon = type === "hotel" ? Bed : ForkKnife;
+        const Icon = type === "hotel" ? Bed : type === "restaurant" ? ForkKnife : Binoculars;
         return (
           <motion.div key={i} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
             className="card-lift bg-white rounded-3xl shadow-soft p-6" data-testid={`${type}-card-${i}`}>
@@ -54,7 +55,7 @@ export default function PlacesTab({ trip, type }) {
                 </div>
                 <div>
                   <h3 className="font-heading font-bold leading-tight">{item.name}</h3>
-                  <p className="text-xs text-muted-foreground">{type === "hotel" ? item.area : item.cuisine}</p>
+                  <p className="text-xs text-muted-foreground">{type === "hotel" ? item.area : type === "restaurant" ? item.cuisine : item.category}</p>
                 </div>
               </div>
               <button onClick={() => toggleFav(item)} data-testid={`${type}-fav-${i}`} aria-label="Toggle favorite"
@@ -78,6 +79,9 @@ export default function PlacesTab({ trip, type }) {
               {type === "restaurant" && item.veg_friendly && (
                 <span className="bg-primary/10 text-primary rounded-full px-3 py-1 text-xs font-bold">Veg friendly</span>
               )}
+              {type === "attraction" && item.recommended_duration && (
+                <span className="bg-secondary rounded-full px-3 py-1 text-xs font-bold">{item.recommended_duration}</span>
+              )}
               {(item.amenities || []).slice(0, 3).map((a) => (
                 <span key={a} className="bg-secondary rounded-full px-3 py-1 text-xs">{a}</span>
               ))}
@@ -86,7 +90,7 @@ export default function PlacesTab({ trip, type }) {
             {item.description && <p className="text-sm text-muted-foreground mb-4">{item.description}</p>}
 
             <div className="flex gap-2">
-              <a href={mapsUrl(`${item.name} ${item.area || ""} ${trip.destination}`)} target="_blank" rel="noopener noreferrer"
+              <a href={mapsUrl(`${item.name} ${item.area || item.destination || ""} ${trip.destination}`)} target="_blank" rel="noopener noreferrer"
                 data-testid={`${type}-maps-link-${i}`}
                 className="tap-scale flex-1 flex items-center justify-center gap-1.5 bg-secondary rounded-full py-2.5 text-sm font-bold hover:bg-secondary/70 transition-colors">
                 <MapPin size={15} /> View on Maps

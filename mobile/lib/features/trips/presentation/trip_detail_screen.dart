@@ -41,7 +41,7 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _tripFuture = ref.read(tripsRepositoryPrv).getTrip(widget.tripId);
     _fetchWeather();
   }
@@ -181,7 +181,7 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
 
         return Scaffold(
           body: DefaultTabController(
-            length: 5,
+            length: 6,
             child: NestedScrollView(
               headerSliverBuilder: (context, innerBoxIsScrolled) {
                 return [
@@ -239,6 +239,7 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                           Tab(text: 'Itinerary', icon: Icon(Icons.calendar_month_outlined, size: 20)),
                           Tab(text: 'Hotels', icon: Icon(Icons.hotel_outlined, size: 20)),
                           Tab(text: 'Dining', icon: Icon(Icons.restaurant_outlined, size: 20)),
+                          Tab(text: 'Attractions', icon: Icon(Icons.photo_camera_outlined, size: 20)),
                           Tab(text: 'Map', icon: Icon(Icons.map_outlined, size: 20)),
                           Tab(text: 'Expenses', icon: Icon(Icons.account_balance_wallet_outlined, size: 20)),
                         ],
@@ -253,6 +254,7 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                   _buildItineraryTab(trip, days),
                   _buildHotelsTab(hotels, favoritesAsync.value ?? const []),
                   _buildRestaurantsTab(restaurants, favoritesAsync.value ?? const []),
+                  _buildAttractionsTab(List<Map<String, dynamic>>.from(itinerary['attractions'] ?? []), favoritesAsync.value ?? const []),
                   _buildMapTab(trip),
                   _buildExpensesTab(trip),
                 ],
@@ -852,6 +854,73 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                     ),
                   ],
                 ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAttractionsTab(List<Map<String, dynamic>> attractions, List<Favorite> favorites) {
+    if (attractions.isEmpty) {
+      return const Center(child: Text('No attraction recommendations found.'));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(20.0),
+      itemCount: attractions.length,
+      itemBuilder: (context, idx) {
+        final attraction = attractions[idx];
+        final location = attraction['location'];
+        final hasCoordinates = location is Map && location['latitude'] != null && location['longitude'] != null;
+        final locationLabel = hasCoordinates
+          ? '${location['latitude']}, ${location['longitude']}'
+          : attraction['destination']?.toString() ?? '';
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.photo_camera_outlined, color: AppTheme.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        attraction['name'] ?? '',
+                        style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.foreground),
+                      ),
+                    ),
+                    _buildFavoriteButton('attraction', attraction, favorites),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  attraction['description'] ?? '',
+                  style: GoogleFonts.dmSans(color: AppTheme.mutedText, fontSize: 13, height: 1.4),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    if (attraction['category'] != null) Chip(label: Text('${attraction['category']}')),
+                    if (attraction['recommended_duration'] != null) Chip(label: Text('${attraction['recommended_duration']}')),
+                  ],
+                ),
+                if (locationLabel.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => _launchUrl('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent('${attraction['name']} $locationLabel')}'),
+                      icon: const Icon(Icons.map_outlined, size: 18),
+                      label: const Text('View Maps'),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

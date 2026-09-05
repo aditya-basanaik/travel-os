@@ -183,6 +183,25 @@ class TripsRepository {
     return null;
   }
 
+  Future<Trip?> planTripNaturally(String request) async {
+    try {
+      final response = await _dio.post(
+        '/trips/plan/natural',
+        data: {'request': request.trim()},
+        options: Options(
+          receiveTimeout: const Duration(seconds: 45),
+          sendTimeout: const Duration(seconds: 20),
+        ),
+      );
+      if (response.statusCode == 200) {
+        return Trip.fromJson(response.data);
+      }
+    } catch (e) {
+      debugPrint('Natural plan request failed: $e');
+    }
+    return null;
+  }
+
   Future<Map<String, dynamic>> getTripWeather(String tripId) async {
     try {
       final response = await _dio.get('/trips/$tripId/weather');

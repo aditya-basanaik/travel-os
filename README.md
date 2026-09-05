@@ -24,6 +24,7 @@ python -m uvicorn server:app --host 0.0.0.0 --port 8001
 
 Required env values include:
 
+- `ENV`
 - `MONGO_URL`
 - `DB_NAME`
 - `JWT_SECRET`
@@ -31,6 +32,18 @@ Required env values include:
 - `ADMIN_PASSWORD`
 - `EMERGENT_LLM_KEY`
 - `GOOGLE_OAUTH_CLIENT_IDS`
+
+Production password reset delivery additionally requires `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_USERNAME`, `SMTP_PASSWORD`, and `RESET_EMAIL_FROM`. Development mode returns
+a local reset link for testing; production never returns reset tokens in the API response.
+Use [backend/.env.example](backend/.env.example) as the configuration template.
+
+For direct web Google login, set `REACT_APP_GOOGLE_CLIENT_ID` in
+[frontend/.env.example](frontend/.env.example), and include the same web client ID
+in the backend `GOOGLE_OAUTH_CLIENT_IDS` list. In Google Cloud Console, add the web
+origin (`http://localhost:3000` locally and the production HTTPS origin when deployed)
+to authorized JavaScript origins. Publish the OAuth consent screen or add the app's
+production audience so accounts are not limited to test users.
 
 ### Web frontend
 
@@ -56,6 +69,7 @@ flutter build apk --debug \
 - Auth and session flow are stable and intentionally left unchanged during the polish pass.
 - The working trip, planning, dashboard, favorites, expenses, sharing, restore, and help flows remain intact.
 - The AI trip planner now skips the remote Claude call when `EMERGENT_LLM_KEY` is missing and immediately uses the local deterministic itinerary fallback instead of hanging.
+- The planner accepts natural-language requests through the web and Flutter clients and routes them through the validated structured planner at `/api/trips/plan/natural`.
 - UI polish is being applied to the core app shell and dashboard surfaces without altering request logic or auth behavior.
 - The mobile trip map remains a safe placeholder/foundation only; Google Maps remains intentionally deferred.
 - Existing features remain intact and are not being replaced wholesale.

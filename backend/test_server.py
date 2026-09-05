@@ -110,6 +110,42 @@ class ServerUnitTests(unittest.IsolatedAsyncioTestCase):
                 budget=0,
             )
 
+    def test_planned_itinerary_rejects_negative_activity_cost(self):
+        itinerary = server.generate_local_itinerary("Goa", "2026-09-01", "2026-09-02", 10000, "₹", 2, ["nature"])
+        itinerary["days"][0]["activities"][0]["estimated_cost"] = -1
+
+        with self.assertRaises(ValueError):
+            server.validate_planned_itinerary(itinerary, 2, "2026-09-01", 10000)
+
+    def test_planned_itinerary_rejects_budget_overrun(self):
+        itinerary = server.generate_local_itinerary("Goa", "2026-09-01", "2026-09-02", 10000, "₹", 2, ["nature"])
+        itinerary["cost_breakdown"]["misc"] = 10000
+
+        with self.assertRaises(ValueError):
+            server.validate_planned_itinerary(itinerary, 2, "2026-09-01", 10000)
+
+    def test_planned_itinerary_requires_complete_structure(self):
+        with self.assertRaises(ValueError):
+            server.validate_planned_itinerary({"days": []}, 1, "2026-09-01", 10000)
+
+    def test_natural_plan_request_extracts_structured_requirements(self):
+        plan = server.parse_natural_plan_request(
+            "I want a peaceful 3-day trip near Bangalore under ₹12,000 for two people. "
+            "I like nature, waterfalls and vegetarian food."
+        )
+
+        self.assertEqual(plan.destination, "Bangalore")
+        self.assertEqual(plan.budget, 12000)
+        self.assertEqual(plan.currency, "₹")
+        self.assertEqual(plan.people_count, 2)
+        self.assertEqual(plan.end_date, (server.utcnow().date() + timedelta(days=2)).isoformat())
+        self.assertIn("nature", plan.interests)
+        self.assertIn("food", plan.interests)
+
+    def test_natural_plan_request_requires_critical_requirements(self):
+        with self.assertRaises(ValueError):
+            server.parse_natural_plan_request("Plan something beautiful for me")
+
     def test_activity_image_candidates_are_destination_specific(self):
         candidates = server.build_activity_image_candidates("Sunrise viewpoint", "Eiffel Tower, Paris", "Paris", "nature")
 
@@ -153,11 +189,13 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
             "profiles": server.db.profiles,
             "login_attempts": server.db.login_attempts,
             "trips": server.db.trips,
+            "password_reset_tokens": server.db.password_reset_tokens,
         }
         server.db.users = InMemoryCollection()
         server.db.profiles = InMemoryCollection()
         server.db.login_attempts = InMemoryCollection()
         server.db.trips = InMemoryCollection()
+        server.db.password_reset_tokens = InMemoryCollection()
         self.client = httpx.AsyncClient(
             transport=httpx.ASGITransport(app=server.app),
             base_url="http://testserver",
@@ -203,6 +241,64 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(bearer_me.status_code, 200)
         self.assertEqual(bearer_me.json()["email"], "test@example.com")
 
+    async def test_forgot_password_returns_dev_link_only_outside_production(self):
+        await self.client.post(
+            "/api/auth/register",
+            json={"name": "Reset User", "email": "reset@example.com", "password": "password123"},
+        )
+
+        response = await self.client.post(
+            "/api/auth/forgot-password",
+            json={"email": "reset@example.com"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("dev_reset_link", response.json())
+
+    async def test_forgot_password_never_returns_link_in_production(self):
+        await self.client.post(
+            "/api/auth/register",
+            json={"name": "Production Reset User", "email": "prod-reset@example.com", "password": "password123"},
+        )
+        provider = AsyncMock()
+
+        with patch.object(server, "IS_PROD", True), patch.object(server, "get_password_reset_provider", return_value=provider):
+            response = await self.client.post(
+                "/api/auth/forgot-password",
+                json={"email": "prod-reset@example.com"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("dev_reset_link", response.json())
+        provider.send.assert_awaited_once()
+
+    async def test_reset_password_token_is_single_use(self):
+        register = await self.client.post(
+            "/api/auth/register",
+            json={"name": "Reset User", "email": "single-use@example.com", "password": "password123"},
+        )
+        self.assertEqual(register.status_code, 200)
+        await server.db.password_reset_tokens.insert_one({
+            "_id": "single-use-token-id",
+            "token": "single-use-token",
+            "email": "single-use@example.com",
+            "used": False,
+            "expires_at": server.utcnow() + timedelta(hours=1),
+            "created_at": server.utcnow(),
+        })
+
+        first = await self.client.post(
+            "/api/auth/reset-password",
+            json={"token": "single-use-token", "password": "new-password123"},
+        )
+        second = await self.client.post(
+            "/api/auth/reset-password",
+            json={"token": "single-use-token", "password": "another-password123"},
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 400)
+
     async def test_invalid_login_is_rejected(self):
         await self.client.post(
             "/api/auth/register",
@@ -216,6 +312,34 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(login.status_code, 401)
         self.assertEqual(login.json()["detail"], "Invalid email or password")
+
+    async def test_google_web_token_creates_session_for_configured_audience(self):
+        google_response = type(
+            "GoogleResponse",
+            (),
+            {
+                "status_code": 200,
+                "json": lambda self: {
+                    "aud": "web-client-id",
+                    "iss": "https://accounts.google.com",
+                    "email": "google-user@example.com",
+                    "email_verified": "true",
+                    "name": "Google User",
+                },
+            },
+        )()
+
+        with patch.dict(os.environ, {"GOOGLE_OAUTH_CLIENT_IDS": "web-client-id"}), patch.object(
+            server.requests, "get", return_value=google_response
+        ):
+            response = await self.client.post(
+                "/api/auth/google/token",
+                json={"id_token": "g" * 24},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["email"], "google-user@example.com")
+        self.assertIn("access_token", response.json())
 
     async def test_authenticated_profile_and_trip_ownership(self):
         register = await self.client.post(
@@ -347,6 +471,27 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("itinerary", payload)
         self.assertIn("days", payload["itinerary"])
         self.assertGreater(len(payload["itinerary"]["days"]), 0)
+        self.assertIn("attractions", payload["itinerary"])
+
+    async def test_natural_plan_endpoint_reuses_structured_planner(self):
+        register = await self.client.post(
+            "/api/auth/register",
+            json={"name": "Natural Planner", "email": "natural@example.com", "password": "password123"},
+        )
+        self.assertEqual(register.status_code, 200)
+
+        with patch.dict(os.environ, {"EMERGENT_LLM_KEY": ""}, clear=False), patch.object(
+            server, "get_activity_image", return_value="https://example.com/activity.jpg"
+        ):
+            response = await self.client.post(
+                "/api/trips/plan/natural",
+                json={"request": "Plan a peaceful 3-day trip near Bangalore under ₹12,000 for two people with nature."},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["destination"], "Bangalore")
+        self.assertEqual(response.json()["budget"], 12000)
+        self.assertEqual(response.json()["people_count"], 2)
 
     async def test_expense_client_id_makes_retry_idempotent(self):
         register = await self.client.post(

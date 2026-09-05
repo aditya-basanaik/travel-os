@@ -22,6 +22,7 @@ const LOAD_MSGS = ["Reading your preferences…", "Mapping out the days…", "Fi
 export default function Planner() {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({ destination: "", start_date: today, end_date: today, budget: "", currency: "₹", people_count: 2, interests: [] });
+  const [naturalRequest, setNaturalRequest] = useState("");
   const [generating, setGenerating] = useState(false);
   const [msgIdx, setMsgIdx] = useState(0);
   const [error, setError] = useState("");
@@ -51,6 +52,28 @@ export default function Planner() {
     }
   };
 
+  const submitNatural = async () => {
+    if (naturalRequest.trim().length < 10) {
+      setError("Describe your trip in a little more detail.");
+      return;
+    }
+    setError("");
+    setGenerating(true);
+    setMsgIdx(0);
+    const timer = setInterval(() => setMsgIdx((i) => (i + 1) % LOAD_MSGS.length), 3500);
+    try {
+      const { data } = await api.post("/trips/plan/natural", { request: naturalRequest.trim() });
+      toast.success("Your itinerary is ready!");
+      navigate(`/trips/${data.id}`);
+    } catch (err) {
+      setError(fmtErr(err));
+      toast.error("Couldn't understand that trip request");
+    } finally {
+      clearInterval(timer);
+      setGenerating(false);
+    }
+  };
+
   return (
     <div className="max-w-2xl" data-testid="planner-page">
       <p className="label-overline mb-2">AI Trip Planner</p>
@@ -74,6 +97,28 @@ export default function Planner() {
         ) : (
           <motion.form key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} onSubmit={submit}
             className="bg-white rounded-3xl shadow-soft p-6 md:p-8 space-y-7" data-testid="planner-form">
+            <div className="bg-secondary/70 rounded-2xl p-4 space-y-3">
+              <div>
+                <p className="font-heading font-bold">Plan from a description</p>
+                <p className="text-sm text-muted-foreground">Try: “A peaceful 3-day trip near Bangalore under ₹12,000 for two.”</p>
+              </div>
+              <textarea
+                value={naturalRequest}
+                onChange={(e) => setNaturalRequest(e.target.value)}
+                placeholder="Tell us about the trip you want..."
+                rows={3}
+                data-testid="natural-planner-input"
+                className="w-full resize-none rounded-2xl border border-input bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <Button type="button" variant="secondary" onClick={submitNatural} data-testid="natural-planner-submit" className="rounded-full font-bold">
+                Plan from description
+              </Button>
+            </div>
+
+            <div className="border-t border-border/70 pt-6">
+              <p className="text-sm font-bold">Or build it with structured details</p>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="destination">Destination</Label>
               <Input id="destination" required minLength={2} data-testid="planner-destination-input" value={form.destination}

@@ -6,7 +6,7 @@ import 'package:travel_os/features/auth/data/auth_repository.dart';
 class Favorite {
   final String id;
   final String tripId;
-  final String type; // "hotel" or "restaurant"
+  final String type; // "hotel", "restaurant", or "attraction"
   final String name;
   final String? externalId;
   final Map<String, dynamic> meta;

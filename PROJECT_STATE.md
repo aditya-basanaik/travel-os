@@ -47,18 +47,18 @@ Status uses `Complete`, `Partial`, `Broken`, `Missing`, or `Unknown` for Phase 1
 | Email registration/login/logout | Partial | FastAPI routes and web/mobile forms exist; tokens are also returned in JSON as well as cookies. |
 | Password hashing | Complete | bcrypt hashing and verification are implemented server-side. |
 | Current session/protected APIs | Partial | JWT access/refresh cookies and Bearer fallback exist; mobile stores tokens securely. |
-| Forgot/reset password | Partial | Web and Flutter reset screens/routes exist; no SMTP, reset link is returned in development response/logs. |
-| Google login | Partial | Web and Flutter use Emergent's managed Google OAuth broker; Flutter launches the system browser and receives a `travelos://auth/callback` session. Direct Google OAuth is not configured. |
+| Forgot/reset password | Partial | Web and Flutter reset screens/routes exist; development uses a local link, while production uses the SMTP provider abstraction and never returns reset tokens. |
+| Google login | Partial | Flutter uses direct Google ID-token login, and web now uses Google Identity Services with `/auth/google/token`; Google Cloud client/origin publishing configuration is still required for unrestricted accounts. |
 | Phone OTP / Apple sign-in | Missing | No provider or routes. Architecturally deferred. |
 | Profile/preferences | Partial | Name, email, photo URL, age, budget, food preference, languages, and favourite destinations exist. No upload, travel style, or broad preference model. |
 | User dashboard/home | Partial | Web and Flutter show greetings, trips, AI planning CTA, authenticated trip/destination search, workspace quick actions, and profile-grounded saved-destination recommendations. Richer saved-trip presentation remains absent. |
-| AI trip planner | Partial | Web/mobile forms call `/api/trips/plan`; Claude JSON generation has a local fallback and Unsplash enrichment. There is no natural-language planner UI, live data grounding, or output validation. |
+| AI trip planner | Partial | Web/mobile forms call `/api/trips/plan` and `/api/trips/plan/natural`; structured extraction, schema validation, budget checks, and Unsplash enrichment are present. Live data grounding remains absent. |
 | AI trip planner reliability | Complete | Missing `EMERGENT_LLM_KEY` no longer triggers the remote LLM path; the backend immediately falls back to the local itinerary generator and the web/mobile clients now time out quickly instead of waiting indefinitely. |
 | AI itinerary refinement | Partial | Protected `/trips/{id}/refine` uses Claude when configured and a deterministic fallback; web and Flutter controls exist, but refinement has no conversation state. |
 | Day-by-day itinerary | Complete | Generated and displayed on both clients; web and Flutter allow activity editing, add/remove, and persisted itinerary replacement. |
 | Hotels | Partial | AI-generated recommendation cards and Google Maps/Booking.com deep links. No live search/details, distance, reliable prices, or official partner integration. Names/prices may be generated. |
 | Restaurants | Partial | AI-generated cards, ratings, cuisine, vegetarian flag, favorites, and Maps links. No live search/details/open-now/family filters. |
-| Attractions | Missing | No separate model, API, tab, or discovery flow. Generic itinerary activities are the only approximation. |
+| Attractions | Partial | Generated itineraries now include maps-ready attraction recommendations, with web/mobile tabs and favorites. Provider-backed discovery remains absent. |
 | Google Maps | Postponed | Existing placeholder/native foundation and external links are preserved. Google Maps APIs, search, routes, and directions are intentionally deferred. |
 | Weather | Partial | `/trips/{id}/weather` uses OpenWeather geocoding/5-day forecast when keyed; otherwise returns null values. It is shown in web itinerary and mobile map tab. |
 | Saved/recent trips | Partial | Trip list, open, edit, duplicate, soft-delete, restore, and favorites exist. No separate archive view or continue workflow beyond persisted trip data. |
@@ -141,7 +141,7 @@ Google web login is delegated to Emergent's OAuth session exchange. Direct Andro
 
 The planner endpoint builds a prompt containing destination, dates, group size, budget, currency, and interests. It asks Claude Sonnet 4.6 to return JSON with a title, summary, day activities, hotels, restaurants, cost breakdown, and tips. The response is stripped of code fences and parsed with `json.loads`; only the presence of a non-empty `days` list is checked. The endpoint retries once, then uses a deterministic local template fallback. Activity images are enriched through Unsplash when `UNSPLASH_ACCESS_KEY` exists, otherwise curated fallback URLs are used.
 
-There is no prompt/session continuity for refinement, no natural-language request schema, no trusted place lookup, no coordinate/opening-hour/route validation, and no reliable-price validation. Generated hotel, restaurant, rating, and cost data must therefore be treated as recommendations, not verified inventory or booking claims.
+There is no prompt/session continuity for refinement, no trusted place lookup, no coordinate/opening-hour/route validation, and no reliable-price validation. Natural-language requests are deterministically extracted into the existing structured planner, with dates defaulting to today when omitted. Generated hotel, restaurant, rating, and cost data must therefore be treated as recommendations, not verified inventory or booking claims.
 
 ## RAG System
 
@@ -158,11 +158,11 @@ Mobile trip detail now has a native Google Maps SDK foundation and itinerary mar
 - Production CORS now reads comma-separated `CORS_ORIGINS` or `FRONTEND_URL`; default remains `http://localhost:3000`.
 - `FRONTEND_URL` is used for reset links, but no production CORS origin configuration is actually wired.
 - Access and refresh tokens are returned in JSON as well as placed in cookies, increasing exposure compared with cookie-only web auth.
-- Reset tokens are returned in a development response and logged; real SMTP delivery is absent.
-- AI output is only minimally parsed. Fake or inaccurate places, prices, ratings, opening hours, coordinates, and routes can reach the UI.
+- Development reset links are returned only outside production; production delivery uses SMTP configuration from `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `RESET_EMAIL_FROM`.
+- AI output is structurally validated for dates, fields, costs, ratings, duplicate activities, and budget totals; place, price, rating, opening-hour, coordinate, and route claims remain unverified.
 - AI fallback content intentionally uses generic/generated hotel and restaurant names.
 - AI refinement now exists at protected `POST /api/trips/{trip_id}/refine`; web controls and a deterministic fallback are implemented. Persistent conversation state is absent.
-- Hotels/restaurants are not live discovery, and attractions are absent.
+- Hotels/restaurants/attractions are not live discovery; generated place data remains unverified.
 - Maps have a mobile SDK foundation with a safe fallback; route and nearby-place behavior remain incomplete.
 - Expense update exists at protected `PUT /api/expenses/{expense_id}` and web editing is wired. Offline submissions now carry client IDs and duplicate retries are ignored; offline amounts are not included in server summaries until sync.
 - Trip restore exists at `POST /api/trips/{trip_id}/restore`; web dashboard lists eligible deleted trips and provides Restore actions. The backend normalizes legacy timezone-naive Mongo deletion timestamps before checking the 30-day window.
@@ -187,7 +187,7 @@ Mobile trip detail now has a native Google Maps SDK foundation and itinerary mar
 - [x] Trip list/detail, itinerary editing on web/mobile, duplicate, soft-delete, and read-only share web flow.
 - [x] Basic expense tracking and limited offline queue.
 - [ ] Secure production-grade reset delivery; mobile reset flow is implemented.
-- [x] AI refinement endpoint and web/mobile controls; structured output/trusted-place validation remains.
+- [x] AI refinement endpoint and web/mobile controls; trusted-place validation remains.
 - [ ] Live hotel, restaurant, attraction discovery.
 - [ ] Interactive Google Maps, directions, nearby search, and route data; intentionally postponed.
 - [x] Expense edit endpoint, web control, and client-ID idempotent offline synchronization.
