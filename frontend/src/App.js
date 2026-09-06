@@ -13,6 +13,7 @@ import TripDetail from "@/pages/TripDetail";
 import Profile from "@/pages/Profile";
 import SharedTrip from "@/pages/ShareTrip";
 import HelpAssistant from "@/pages/HelpAssistant";
+import Favorites from "@/pages/Favorites";
 
 function ProtectedShell() {
   const { user } = useAuth();
@@ -53,6 +54,7 @@ function App() {
               <Route path="/plan" element={<Planner />} />
               <Route path="/trips/:id" element={<TripDetail />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/favorites" element={<Favorites />} />
               <Route path="/help" element={<HelpAssistant />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

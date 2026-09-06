@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -446,6 +447,62 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
     final activities = List<Map<String, dynamic>>.from(days[dayIndex]['activities'] ?? [])..removeAt(activityIndex);
     days[dayIndex] = {...days[dayIndex], 'activities': activities};
     setState(() => _draftItinerary = {..._draftItinerary!, 'days': days});
+  }
+
+  String _dayOperationError(Object error) {
+    if (error is DioException) {
+      final detail = error.response?.data?['detail'];
+      if (detail is String) return detail;
+    }
+    return 'Could not update itinerary days.';
+  }
+
+  Future<void> _addDay(Trip trip) async {
+    setState(() => _savingItinerary = true);
+    try {
+      final updated = await ref.read(tripsRepositoryPrv).addItineraryDay(trip.id);
+      if (!mounted) return;
+      if (updated == null) throw StateError('Could not add day');
+      setState(() {
+        _tripOverride = updated;
+        _draftItinerary = updated.itinerary;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Day added.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_dayOperationError(error))));
+    } finally {
+      if (mounted) setState(() => _savingItinerary = false);
+    }
+  }
+
+  Future<void> _removeDay(Trip trip, int dayNumber) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remove day $dayNumber?'),
+        content: const Text('Its activities will also be removed and the remaining days will be renumbered.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _savingItinerary = true);
+    try {
+      final updated = await ref.read(tripsRepositoryPrv).removeItineraryDay(trip.id, dayNumber);
+      if (!mounted) return;
+      if (updated == null) throw StateError('Could not remove day');
+      setState(() {
+        _tripOverride = updated;
+        _draftItinerary = updated.itinerary;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Day removed.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_dayOperationError(error))));
+    } finally {
+      if (mounted) setState(() => _savingItinerary = false);
+    }
   }
 
   Widget _buildItineraryControls(Trip trip) {
@@ -920,27 +977,43 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                       label: const Text('View Maps'),
                     ),
                   ),
+                  if (_editingItinerary)
+                    IconButton(
+                      tooltip: 'Remove day',
+                      onPressed: _savingItinerary ? null : () => _removeDay(trip, day['day_number'] as int? ?? dayIndex + 1),
+                      icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.accent),
+                    ),
                 ],
               ],
             ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildFavoriteButton(
-    String type,
-    Map<String, dynamic> item,
-    List<Favorite> favorites,
-  ) {
-    final name = item['name']?.toString() ?? '';
-    final favorite = favorites.where((fav) => fav.type == type && fav.name == name).firstOrNull;
-    return IconButton(
-      tooltip: favorite == null ? 'Save favorite' : 'Remove favorite',
-      icon: Icon(
-        favorite == null ? Icons.favorite_border_rounded : Icons.favorite_rounded,
-        color: favorite == null ? AppTheme.mutedText : AppTheme.accent,
+              Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _savingItinerary ? null : () => setState(() => _editingItinerary = false),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _savingItinerary ? null : _saveItinerary,
+                          icon: const Icon(Icons.check, size: 18),
+                          label: Text(_savingItinerary ? 'Saving...' : 'Save changes'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _savingItinerary ? null : () => _addDay(trip),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add day'),
+                  ),
+                ],
+              ),
         size: 20,
       ),
       onPressed: () async {

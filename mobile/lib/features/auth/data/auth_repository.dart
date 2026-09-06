@@ -66,6 +66,7 @@ class AuthRepository extends ChangeNotifier {
       final response = await _client.dio.post(
         '/auth/login',
         data: {'email': email, 'password': password},
+        options: Options(headers: {'X-Client-Platform': 'mobile'}),
       );
       
       if (response.statusCode == 200 && response.data != null) {
@@ -98,6 +99,7 @@ class AuthRepository extends ChangeNotifier {
           'email': email.trim().toLowerCase(),
           'password': password
         },
+        options: Options(headers: {'X-Client-Platform': 'mobile'}),
       );
 
       if (response.statusCode == 200 && response.data != null) {
@@ -126,6 +128,7 @@ class AuthRepository extends ChangeNotifier {
       final response = await _client.dio.post(
         '/auth/google/session',
         data: {'session_id': sessionId},
+        options: Options(headers: {'X-Client-Platform': 'mobile'}),
       );
 
       if (response.statusCode == 200 && response.data != null) {
@@ -154,6 +157,7 @@ class AuthRepository extends ChangeNotifier {
       final response = await _client.dio.post(
         '/auth/google/token',
         data: {'id_token': idToken},
+        options: Options(headers: {'X-Client-Platform': 'mobile'}),
       );
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data;

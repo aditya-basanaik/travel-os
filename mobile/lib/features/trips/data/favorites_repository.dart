@@ -10,6 +10,8 @@ class Favorite {
   final String name;
   final String? externalId;
   final Map<String, dynamic> meta;
+  final String? tripTitle;
+  final String? tripDestination;
 
   Favorite({
     required this.id,
@@ -18,6 +20,8 @@ class Favorite {
     required this.name,
     this.externalId,
     required this.meta,
+    this.tripTitle,
+    this.tripDestination,
   });
 
   factory Favorite.fromJson(Map<String, dynamic> json) {
@@ -28,6 +32,8 @@ class Favorite {
       name: json['name'] ?? '',
       externalId: json['external_id'],
       meta: Map<String, dynamic>.from(json['meta'] ?? {}),
+      tripTitle: json['trip_title'],
+      tripDestination: json['trip_destination'],
     );
   }
 }
@@ -49,6 +55,14 @@ class FavoritesRepository {
       debugPrint('Error getting favorites: $e');
     }
     return [];
+  }
+
+  Future<List<Favorite>> getAllFavorites({String? type}) async {
+    final response = await _dio.get('/favorites', queryParameters: type == null ? null : {'type': type});
+    if (response.statusCode == 200 && response.data is List) {
+      return (response.data as List).map((favorite) => Favorite.fromJson(favorite)).toList();
+    }
+    throw StateError('Could not load favorites');
   }
 
   Future<Favorite?> addFavorite({
@@ -96,4 +110,8 @@ final favoritesRepositoryPrv = Provider<FavoritesRepository>((ref) {
 // Family provider keyed by tripId — call ref.invalidate(favoritesPrv(tripId)) to refresh
 final favoritesPrv = FutureProvider.autoDispose.family<List<Favorite>, String>((ref, tripId) async {
   return ref.watch(favoritesRepositoryPrv).getFavorites(tripId);
+});
+
+final globalFavoritesPrv = FutureProvider.autoDispose<List<Favorite>>((ref) async {
+  return ref.watch(favoritesRepositoryPrv).getAllFavorites();
 });

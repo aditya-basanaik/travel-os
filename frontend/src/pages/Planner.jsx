@@ -62,7 +62,9 @@ export default function Planner() {
     setMsgIdx(0);
     const timer = setInterval(() => setMsgIdx((i) => (i + 1) % LOAD_MSGS.length), 3500);
     try {
-      const { data } = await api.post("/trips/plan/natural", { request: naturalRequest.trim() });
+      const { data } = await api.post("/trips/plan/natural", { request: naturalRequest.trim() }, {
+        timeout: 180000,
+      });
       toast.success("Your itinerary is ready!");
       navigate(`/trips/${data.id}`);
     } catch (err) {

@@ -8,6 +8,7 @@ import 'package:travel_os/features/home/presentation/home_screen.dart';
 import 'package:travel_os/features/trips/presentation/trips_screen.dart';
 import 'package:travel_os/features/trips/presentation/trip_detail_screen.dart';
 import 'package:travel_os/features/trips/presentation/shared_trip_screen.dart';
+import 'package:travel_os/features/trips/presentation/favorites_screen.dart';
 import 'package:travel_os/features/ai_planner/presentation/ai_planner_screen.dart';
 import 'package:travel_os/features/expenses/presentation/expenses_screen.dart';
 import 'package:travel_os/features/profile/presentation/profile_screen.dart';
@@ -94,6 +95,10 @@ final appRouterPrv = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/expenses',
             builder: (context, state) => const ExpensesScreen(),
+          ),
+          GoRoute(
+            path: '/favorites',
+            builder: (context, state) => const FavoritesScreen(),
           ),
           GoRoute(
             path: '/profile',

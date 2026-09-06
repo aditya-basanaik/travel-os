@@ -19,10 +19,12 @@ class MainNavigationShell extends StatelessWidget {
       return 2;
     } else if (location.startsWith('/expenses')) {
       return 3;
-    } else if (location.startsWith('/profile')) {
+    } else if (location.startsWith('/favorites')) {
       return 4;
-    } else if (location.startsWith('/help')) {
+    } else if (location.startsWith('/profile')) {
       return 5;
+    } else if (location.startsWith('/help')) {
+      return 6;
     }
     return 0; // default '/' (Home)
   }
@@ -42,9 +44,12 @@ class MainNavigationShell extends StatelessWidget {
         context.go('/expenses');
         break;
       case 4:
-        context.go('/profile');
+        context.go('/favorites');
         break;
       case 5:
+        context.go('/profile');
+        break;
+      case 6:
         context.go('/help');
         break;
     }
@@ -124,18 +129,26 @@ class MainNavigationShell extends StatelessWidget {
                         ),
                         _buildNavItem(
                           index: 4,
-                          icon: Icons.person_rounded,
-                          activeIcon: Icons.person_rounded,
-                          label: 'Profile',
+                          icon: Icons.favorite_border_rounded,
+                          activeIcon: Icons.favorite_rounded,
+                          label: 'Favorites',
                           isSelected: selectedIndex == 4,
                           context: context,
                         ),
                         _buildNavItem(
                           index: 5,
+                          icon: Icons.person_rounded,
+                          activeIcon: Icons.person_rounded,
+                          label: 'Profile',
+                          isSelected: selectedIndex == 5,
+                          context: context,
+                        ),
+                        _buildNavItem(
+                          index: 6,
                           icon: Icons.help_outline_rounded,
                           activeIcon: Icons.help_rounded,
                           label: 'Help',
-                          isSelected: selectedIndex == 5,
+                          isSelected: selectedIndex == 6,
                           context: context,
                         ),
                       ],

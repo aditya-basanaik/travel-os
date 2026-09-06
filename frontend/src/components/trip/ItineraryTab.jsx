@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { ForkKnife, Bed, Car, Compass, Mountains, Martini, Bank, Island, Parachute, MapPin, PencilSimple, Check, Plus, X, Sparkle } from "@phosphor-icons/react";
+import { ForkKnife, Bed, Car, Compass, Mountains, Martini, Bank, Island, Parachute, MapPin, PencilSimple, Check, Plus, X, Sparkle, Trash } from "@phosphor-icons/react";
 import api, { fmtErr } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { COVER_BEACH } from "@/lib/images";
@@ -91,6 +91,29 @@ export default function ItineraryTab({ trip, onUpdate }) {
     setDraft({ ...draft, days: draft.days.map((d, i) => i !== di ? d : { ...d, activities: [...d.activities, act] }) });
   };
 
+  const addDay = async () => {
+    setSaving(true);
+    try {
+      const { data } = await api.post(`/trips/${trip.id}/itinerary/days`);
+      onUpdate(data);
+      setDraft(data.itinerary);
+      toast.success("Day added");
+    } catch (e) { toast.error(fmtErr(e)); }
+    finally { setSaving(false); }
+  };
+
+  const removeDay = async (dayNumber) => {
+    if (!window.confirm(`Remove day ${dayNumber}? Its activities will also be removed.`)) return;
+    setSaving(true);
+    try {
+      const { data } = await api.delete(`/trips/${trip.id}/itinerary/days/${dayNumber}`);
+      onUpdate(data);
+      setDraft(data.itinerary);
+      toast.success("Day removed");
+    } catch (e) { toast.error(fmtErr(e)); }
+    finally { setSaving(false); }
+  };
+
   return (
     <div data-testid="itinerary-tab">
       {it.summary && <p className="text-muted-foreground mb-6 max-w-2xl">{it.summary}</p>}
@@ -154,6 +177,11 @@ export default function ItineraryTab({ trip, onUpdate }) {
               <h3 className="font-heading font-bold text-xl" data-testid={`day-title-${di}`}>
                 Day {day.day_number || di + 1} <span className="text-muted-foreground font-medium text-base">· {fmtDate(day.date)} · {day.title} {weather?.[day.date] && (<span className="ml-3 text-sm">{weather[day.date].emoji} {weather[day.date].temp}°C</span>)}</span>
               </h3>
+              {editing && (
+                <button onClick={() => removeDay(day.day_number || di + 1)} disabled={saving} data-testid={`day-remove-${di}`} aria-label={`Remove day ${day.day_number || di + 1}`} className="tap-scale w-9 h-9 rounded-full bg-destructive/10 text-destructive flex items-center justify-center">
+                  <Trash size={16} />
+                </button>
+              )}
               <span className="text-sm font-bold text-primary" data-testid={`day-cost-${di}`}>{trip.currency}{Number(day.estimated_cost || 0).toLocaleString()}</span>
             </div>
             <div className="border-l-2 border-dashed border-primary/30 ml-3 pl-6 space-y-4">
@@ -210,6 +238,12 @@ export default function ItineraryTab({ trip, onUpdate }) {
           </motion.div>
         ))}
       </div>
+
+      {editing && (
+        <Button onClick={addDay} disabled={saving} data-testid="day-add" className="mt-8 rounded-full bg-primary text-white tap-scale">
+          <Plus size={16} weight="bold" className="mr-1" /> Add day
+        </Button>
+      )}
 
       {(it.tips || []).length > 0 && !editing && (
         <div className="mt-10 bg-accent/10 rounded-3xl p-6" data-testid="itinerary-tips">

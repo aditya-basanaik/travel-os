@@ -1,11 +1,12 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { Compass, Sparkle, User, SignOut, AirplaneTilt, Question } from "@phosphor-icons/react";
+import { Compass, Sparkle, User, SignOut, AirplaneTilt, Question, HeartStraight } from "@phosphor-icons/react";
 import { useAuth } from "@/context/AuthContext";
 
 const NAV = [
   { to: "/", label: "Trips", icon: Compass, testid: "nav-trips" },
   { to: "/plan", label: "Plan", icon: Sparkle, testid: "nav-plan" },
   { to: "/profile", label: "Profile", icon: User, testid: "nav-profile" },
+  { to: "/favorites", label: "Favorites", icon: HeartStraight, testid: "nav-favorites" },
   { to: "/help", label: "Help", icon: Question, testid: "nav-help" },
 ];
 

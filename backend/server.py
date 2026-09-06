@@ -9,6 +9,7 @@ import json
 import uuid
 import asyncio
 import secrets
+import hashlib
 import logging
 import math
 import smtplib
@@ -33,6 +34,7 @@ app = FastAPI()
 api_router = APIRouter(prefix="/api")
 logger = logging.getLogger("travelos")
 logging.basicConfig(level=logging.INFO)
+MAX_TRIP_DAYS = 30
 
 IS_PROD = os.environ.get("ENV", "development") == "production"
 JWT_ALGORITHM = "HS256"
@@ -285,13 +287,46 @@ def create_access_token(user_id: str, email: str) -> str:
 
 
 def create_refresh_token(user_id: str) -> str:
-    payload = {"sub": user_id, "exp": utcnow() + timedelta(days=7), "type": "refresh"}
+    payload = {"sub": user_id, "jti": str(uuid.uuid4()), "exp": utcnow() + timedelta(days=7), "type": "refresh"}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
-def set_auth_cookies(response: Response, user_id: str, email: str):
-    response.set_cookie("access_token", create_access_token(user_id, email), httponly=True, secure=IS_PROD, samesite="none" if IS_PROD else "lax", max_age=900, path="/")
-    response.set_cookie("refresh_token", create_refresh_token(user_id), httponly=True, secure=IS_PROD, samesite="none" if IS_PROD else "lax", max_age=604800, path="/")
+COOKIE_SAMESITE = "none" if IS_PROD else "lax"
+COOKIE_SECURE = IS_PROD
+
+
+def hash_refresh_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+async def issue_refresh_token(user_id: str) -> str:
+    token = create_refresh_token(user_id)
+    payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    await db.refresh_tokens.insert_one({
+        "_id": payload["jti"],
+        "token_hash": hash_refresh_token(token),
+        "user_id": user_id,
+        "expires_at": datetime.fromtimestamp(payload["exp"], timezone.utc),
+        "revoked_at": None,
+        "created_at": utcnow(),
+    })
+    return token
+
+
+def set_auth_cookies(response: Response, access_token: str, refresh_token: str):
+    response.set_cookie("access_token", access_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=900, path="/")
+    response.set_cookie("refresh_token", refresh_token, httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, max_age=604800, path="/")
+
+
+def is_mobile_client(request: Request) -> bool:
+    return request.headers.get("X-Client-Platform", "").lower() == "mobile"
+
+
+def auth_response(user: dict, request: Request, access_token: str, refresh_token: str) -> dict:
+    result = public_user(user)
+    if is_mobile_client(request):
+        result.update({"access_token": access_token, "refresh_token": refresh_token})
+    return result
 
 
 def public_user(doc: dict) -> dict:
@@ -326,7 +361,7 @@ async def get_current_user(request: Request) -> dict:
 # ---------- Auth endpoints ----------
 
 @api_router.post("/auth/register")
-async def register(body: RegisterIn, response: Response):
+async def register(body: RegisterIn, request: Request, response: Response):
     email = body.email.lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(409, "An account with this email already exists")
@@ -334,12 +369,9 @@ async def register(body: RegisterIn, response: Response):
     await db.users.insert_one(user.to_mongo())
     await db.profiles.insert_one(Profile(user_id=user.id).to_mongo())
     access_token = create_access_token(user.id, email)
-    refresh_token = create_refresh_token(user.id)
-    set_auth_cookies(response, user.id, email)
-    res_data = public_user(user.to_mongo())
-    res_data["access_token"] = access_token
-    res_data["refresh_token"] = refresh_token
-    return res_data
+    refresh_token = await issue_refresh_token(user.id)
+    set_auth_cookies(response, access_token, refresh_token)
+    return auth_response(user.to_mongo(), request, access_token, refresh_token)
 
 
 @api_router.post("/auth/login")
@@ -361,16 +393,13 @@ async def login(body: LoginIn, request: Request, response: Response):
         raise HTTPException(401, "Invalid email or password")
     await db.login_attempts.delete_one({"identifier": identifier})
     access_token = create_access_token(user["_id"], email)
-    refresh_token = create_refresh_token(user["_id"])
-    set_auth_cookies(response, user["_id"], email)
-    res_data = public_user(user)
-    res_data["access_token"] = access_token
-    res_data["refresh_token"] = refresh_token
-    return res_data
+    refresh_token = await issue_refresh_token(user["_id"])
+    set_auth_cookies(response, access_token, refresh_token)
+    return auth_response(user, request, access_token, refresh_token)
 
 
 @api_router.post("/auth/google/session")
-async def google_session(body: GoogleSessionIn, response: Response):
+async def google_session(body: GoogleSessionIn, request: Request, response: Response):
     try:
         r = requests.get(
             "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
@@ -390,16 +419,13 @@ async def google_session(body: GoogleSessionIn, response: Response):
         await db.profiles.insert_one(Profile(user_id=new_user.id, photo_url=data.get("picture")).to_mongo())
         user = new_user.to_mongo()
     access_token = create_access_token(user["_id"], email)
-    refresh_token = create_refresh_token(user["_id"])
-    set_auth_cookies(response, user["_id"], email)
-    res_data = public_user(user)
-    res_data["access_token"] = access_token
-    res_data["refresh_token"] = refresh_token
-    return res_data
+    refresh_token = await issue_refresh_token(user["_id"])
+    set_auth_cookies(response, access_token, refresh_token)
+    return auth_response(user, request, access_token, refresh_token)
 
 
 @api_router.post("/auth/google/token")
-async def google_token(body: GoogleTokenIn, response: Response):
+async def google_token(body: GoogleTokenIn, request: Request, response: Response):
     try:
         r = requests.get(
             "https://oauth2.googleapis.com/tokeninfo",
@@ -438,12 +464,9 @@ async def google_token(body: GoogleTokenIn, response: Response):
         await db.profiles.insert_one(Profile(user_id=new_user.id, photo_url=data.get("picture")).to_mongo())
         user = new_user.to_mongo()
     access_token = create_access_token(user["_id"], email)
-    refresh_token = create_refresh_token(user["_id"])
-    set_auth_cookies(response, user["_id"], email)
-    res_data = public_user(user)
-    res_data["access_token"] = access_token
-    res_data["refresh_token"] = refresh_token
-    return res_data
+    refresh_token = await issue_refresh_token(user["_id"])
+    set_auth_cookies(response, access_token, refresh_token)
+    return auth_response(user, request, access_token, refresh_token)
 
 
 @api_router.post("/auth/logout")
@@ -476,13 +499,17 @@ async def refresh(request: Request, response: Response):
     user = await db.users.find_one({"_id": payload["sub"]})
     if not user:
         raise HTTPException(401, "User not found")
+    stored = await db.refresh_tokens.find_one({"token_hash": hash_refresh_token(token), "user_id": user["_id"], "revoked_at": None})
+    if not stored:
+        raise HTTPException(401, "Refresh token has been revoked")
+    await db.refresh_tokens.update_one({"_id": stored["_id"]}, {"$set": {"revoked_at": utcnow()}})
     new_access = create_access_token(user["_id"], user["email"])
-    response.set_cookie("access_token", new_access, httponly=True, secure=IS_PROD, samesite="none" if IS_PROD else "lax", max_age=900, path="/")
-    return {
-        "message": "refreshed",
-        "access_token": new_access,
-        "refresh_token": token
-    }
+    new_refresh = await issue_refresh_token(user["_id"])
+    set_auth_cookies(response, new_access, new_refresh)
+    result = {"message": "refreshed"}
+    if request.headers.get("Authorization", "").startswith("Bearer ") or is_mobile_client(request):
+        result.update({"access_token": new_access, "refresh_token": new_refresh})
+    return result
 
 
 @api_router.post("/auth/forgot-password")
@@ -724,7 +751,7 @@ def get_activity_image(query: str, cache: dict | None = None, used: set | None =
         url_base = "https://api.unsplash.com/search/photos"
         try:
             # ask for multiple results so we can pick one not already used
-            r = requests.get(url_base, params={"query": q, "per_page": 6}, headers={"Authorization": f"Client-ID {key}"}, timeout=8)
+            r = requests.get(url_base, params={"query": q, "per_page": 6}, headers={"Authorization": f"Client-ID {key}"}, timeout=3)
             if r.status_code == 200:
                 j = r.json()
                 results = j.get("results", [])
@@ -933,7 +960,32 @@ def parse_itinerary_json(text: str) -> dict:
     data = json.loads(cleaned)
     if not isinstance(data.get("days"), list) or not data["days"]:
         raise ValueError("Missing days in itinerary")
+    normalize_itinerary_days(data)
     return data
+
+
+def safe_day_number(day: dict) -> Optional[int]:
+    try:
+        value = day.get("day_number")
+        if value is None or isinstance(value, bool):
+            return None
+        return int(value)
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def normalize_itinerary_days(itinerary: dict) -> dict:
+    days = itinerary.get("days")
+    if not isinstance(days, list):
+        return itinerary
+    for day in days:
+        if not isinstance(day, dict):
+            raise ValueError("Each itinerary day must be an object")
+        day_number = safe_day_number(day)
+        if day_number is None:
+            raise ValueError("Each itinerary day must have a numeric day_number")
+        day["day_number"] = day_number
+    return itinerary
 
 
 def validate_planned_itinerary(data: dict, expected_days: int, start_date: str, budget: float) -> dict:
@@ -1021,7 +1073,7 @@ NUMBER_WORDS = {
 def parse_natural_plan_request(text: str) -> PlanRequest:
     request = " ".join(text.strip().split())
     lowered = request.lower()
-    duration_match = re.search(r"\b(\d{1,2})\s*[- ]?day\b", lowered)
+    duration_match = re.search(r"\b(\d{1,2})\s*[- ]?days?\b", lowered)
     if duration_match:
         duration = int(duration_match.group(1))
     elif re.search(r"\bweekend\b", lowered):
@@ -1045,11 +1097,11 @@ def parse_natural_plan_request(text: str) -> PlanRequest:
     else:
         currency = "₹"
 
-    people_match = re.search(r"\bfor\s+(\d{1,2})\s+(?:people|persons|travellers|travelers)\b", lowered)
+    people_match = re.search(r"\bfor\s+(\d{1,2})(?:\s+(?:people|persons|travellers|travelers))?\b", lowered)
     people_count = int(people_match.group(1)) if people_match else None
     if people_count is None:
         for word, value in NUMBER_WORDS.items():
-            if re.search(rf"\bfor\s+{word}\s+(?:people|persons|travellers|travelers)\b", lowered):
+            if re.search(rf"\bfor\s+{word}(?:\s+(?:people|persons|travellers|travelers))?\b", lowered):
                 people_count = value
                 break
     people_count = people_count or 1
@@ -1065,7 +1117,7 @@ def parse_natural_plan_request(text: str) -> PlanRequest:
 
     if not destination:
         raise ValueError("Please include a destination, such as Goa or near Bangalore")
-    if duration is None or not 1 <= duration <= 30:
+    if duration is None or not 1 <= duration <= MAX_TRIP_DAYS:
         raise ValueError("Please include a trip duration from 1 to 30 days")
     if budget is None or budget <= 0:
         raise ValueError("Please include a positive budget, such as under ₹12,000")
@@ -1114,7 +1166,7 @@ async def plan_trip(body: PlanRequest, user: dict = Depends(get_current_user)):
     if nights < 0:
         raise HTTPException(400, "End date must be after start date")
     if nights > 29:
-        raise HTTPException(400, "Trips longer than 30 days are not supported yet")
+        raise HTTPException(400, f"Trips longer than {MAX_TRIP_DAYS} days are not supported yet")
 
     interests = ", ".join(body.interests) if body.interests else "general sightseeing"
     prompt = f"""Plan a {nights + 1}-day trip to {body.destination} for {body.people_count} people, from {body.start_date} to {body.end_date}.
@@ -1177,6 +1229,7 @@ Rules:
     try:
         _img_cache = {}
         _used_imgs = set()
+        image_lookup_budget = 4
         GENERIC_TITLES = {"breakfast and check-in", "lunch break", "dinner and evening stroll", "main attraction visit", "market or neighborhood walk", "sunrise or early city walk"}
         for d in itinerary.get("days", []):
             for a in d.get("activities", []):
@@ -1197,8 +1250,11 @@ Rules:
                     # finally try the full primary_q as-is
                     variants.append(primary_q)
                     for v in variants:
+                        if image_lookup_budget <= 0:
+                            break
                         try:
                             candidate = get_activity_image(v, _img_cache, _used_imgs)
+                            image_lookup_budget -= 1
                             if candidate and candidate not in COVERS.values():
                                 img_url = candidate
                                 break
@@ -1218,12 +1274,15 @@ Rules:
 
                     # try candidates in order
                     for q in candidates:
+                        if image_lookup_budget <= 0:
+                            break
                         qkey = q.lower()
                         if qkey in tried:
                             continue
                         tried.add(qkey)
                         try:
                             candidate = get_activity_image(q, _img_cache, _used_imgs)
+                            image_lookup_budget -= 1
                             if candidate and candidate not in COVERS.values():
                                 img_url = candidate
                                 break
@@ -1497,7 +1556,102 @@ async def update_itinerary(trip_id: str, body: ItineraryUpdate, user: dict = Dep
     await get_owned_trip(trip_id, user)
     if not isinstance(body.itinerary.get("days"), list):
         raise HTTPException(400, "Itinerary must contain a days list")
-    await db.trips.update_one({"_id": trip_id}, {"$set": {"itinerary": body.itinerary, "updated_at": utcnow()}})
+    try:
+        normalized_itinerary = normalize_itinerary_days(body.itinerary)
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+    await db.trips.update_one({"_id": trip_id}, {"$set": {"itinerary": normalized_itinerary, "updated_at": utcnow()}})
+    return trip_out(await db.trips.find_one({"_id": trip_id}))
+
+
+def recalculate_itinerary_costs(itinerary: dict, removed_day: Optional[dict] = None) -> dict:
+    updated = json.loads(json.dumps(itinerary))
+    breakdown = {
+        key: float(value)
+        for key, value in (updated.get("cost_breakdown") or {}).items()
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    }
+    for day in updated.get("days", []):
+        activities = day.get("activities") or []
+        day["estimated_cost"] = round(sum(float(activity.get("estimated_cost", 0) or 0) for activity in activities), 2)
+
+    if removed_day is not None:
+        removed_categories = {"stay": 0.0, "food": 0.0, "transport": 0.0, "activities": 0.0}
+        for activity in removed_day.get("activities") or []:
+            category = activity.get("type")
+            bucket = category if category in ("stay", "food", "transport") else "activities"
+            removed_categories[bucket] += float(activity.get("estimated_cost", 0) or 0)
+        for category, amount in removed_categories.items():
+            if category in breakdown:
+                breakdown[category] = round(max(0, breakdown[category] - amount), 2)
+
+    updated["cost_breakdown"] = {key: round(value, 2) for key, value in breakdown.items()}
+    updated["estimated_cost"] = round(sum(updated["cost_breakdown"].values()), 2)
+    return updated
+
+
+def itinerary_day_date(value: str) -> datetime:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d")
+    except (TypeError, ValueError) as error:
+        raise HTTPException(400, "Itinerary days must use YYYY-MM-DD dates") from error
+
+
+@api_router.post("/trips/{trip_id}/itinerary/days")
+async def add_itinerary_day(trip_id: str, user: dict = Depends(get_current_user)):
+    trip = await get_owned_trip(trip_id, user)
+    itinerary = trip.get("itinerary") or {}
+    days = itinerary.get("days")
+    if not isinstance(days, list) or not days:
+        raise HTTPException(400, "Trip does not contain an itinerary with at least one day")
+    if len(days) >= MAX_TRIP_DAYS:
+        raise HTTPException(400, f"Trips cannot contain more than {MAX_TRIP_DAYS} days")
+    try:
+        normalize_itinerary_days(itinerary)
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+
+    last_date = itinerary_day_date(days[-1].get("date"))
+    new_days = days + [{
+        "day_number": len(days) + 1,
+        "date": (last_date + timedelta(days=1)).strftime("%Y-%m-%d"),
+        "title": f"Day {len(days) + 1}",
+        "activities": [],
+        "estimated_cost": 0,
+    }]
+    updated_itinerary = recalculate_itinerary_costs({**itinerary, "days": new_days})
+    await db.trips.update_one({"_id": trip_id}, {"$set": {"itinerary": updated_itinerary, "updated_at": utcnow()}})
+    return trip_out(await db.trips.find_one({"_id": trip_id}))
+
+
+@api_router.delete("/trips/{trip_id}/itinerary/days/{day_number}")
+async def remove_itinerary_day(trip_id: str, day_number: int, user: dict = Depends(get_current_user)):
+    trip = await get_owned_trip(trip_id, user)
+    itinerary = trip.get("itinerary") or {}
+    days = itinerary.get("days")
+    if not isinstance(days, list) or not days:
+        raise HTTPException(400, "Trip does not contain an itinerary with at least one day")
+    if len(days) == 1:
+        raise HTTPException(400, "An itinerary must contain at least one day")
+    try:
+        normalize_itinerary_days(itinerary)
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+
+    target_index = next((index for index, day in enumerate(days) if safe_day_number(day) == day_number), None)
+    if target_index is None:
+        raise HTTPException(404, "Itinerary day not found")
+    removed_day = days[target_index]
+    base_date = itinerary_day_date(days[0].get("date"))
+    remaining_days = []
+    for index, day in enumerate(days[:target_index] + days[target_index + 1:], start=1):
+        updated_day = dict(day)
+        updated_day["day_number"] = index
+        updated_day["date"] = (base_date + timedelta(days=index - 1)).strftime("%Y-%m-%d")
+        remaining_days.append(updated_day)
+
+    updated_itinerary = recalculate_itinerary_costs({**itinerary, "days": remaining_days}, removed_day=removed_day)
+    await db.trips.update_one({"_id": trip_id}, {"$set": {"itinerary": updated_itinerary, "updated_at": utcnow()}})
     return trip_out(await db.trips.find_one({"_id": trip_id}))
 
 
@@ -1553,6 +1707,36 @@ async def list_favorites(trip_id: str, user: dict = Depends(get_current_user)):
     for f in favs:
         f["id"] = str(f.pop("_id"))
     return favs
+
+
+@api_router.get("/favorites")
+async def list_all_favorites(
+    favorite_type: Optional[str] = Query(default=None, alias="type"),
+    user: dict = Depends(get_current_user),
+):
+    if favorite_type is not None and favorite_type not in ("hotel", "restaurant", "attraction"):
+        raise HTTPException(400, "Type must be hotel, restaurant, or attraction")
+
+    query = {"user_id": user["_id"]}
+    if favorite_type:
+        query["type"] = favorite_type
+    favorites = await db.favorites.find(query).sort("created_at", -1).to_list(500)
+    trip_ids = {favorite.get("trip_id") for favorite in favorites if favorite.get("trip_id")}
+    trips = {}
+    for trip_id in trip_ids:
+        trip = await db.trips.find_one({"_id": trip_id, "user_id": user["_id"]})
+        if trip:
+            trips[trip_id] = trip
+
+    result = []
+    for favorite in favorites:
+        trip = trips.get(favorite.get("trip_id"))
+        favorite["id"] = str(favorite.pop("_id"))
+        if trip:
+            favorite["trip_title"] = trip.get("title")
+            favorite["trip_destination"] = trip.get("destination")
+        result.append(favorite)
+    return result
 
 
 @api_router.post("/trips/{trip_id}/favorites")
@@ -1694,6 +1878,8 @@ async def startup():
 
     await db.users.create_index("email", unique=True)
     await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
+    await db.refresh_tokens.create_index("token_hash", unique=True)
+    await db.refresh_tokens.create_index("expires_at", expireAfterSeconds=0)
     await db.login_attempts.create_index("identifier")
     await db.trips.create_index([("user_id", 1), ("deleted_at", 1)])
     await db.trips.create_index("share_token")

@@ -229,6 +229,32 @@ class TripsRepository {
     return null;
   }
 
+  Future<Trip?> addItineraryDay(String tripId) async {
+    try {
+      final response = await _dio.post('/trips/$tripId/itinerary/days');
+      if (response.statusCode == 200) {
+        return Trip.fromJson(response.data);
+      }
+    } catch (e) {
+      debugPrint('Error adding itinerary day: $e');
+      rethrow;
+    }
+    return null;
+  }
+
+  Future<Trip?> removeItineraryDay(String tripId, int dayNumber) async {
+    try {
+      final response = await _dio.delete('/trips/$tripId/itinerary/days/$dayNumber');
+      if (response.statusCode == 200) {
+        return Trip.fromJson(response.data);
+      }
+    } catch (e) {
+      debugPrint('Error removing itinerary day: $e');
+      rethrow;
+    }
+    return null;
+  }
+
   Future<Trip?> refineItinerary(String tripId, String instruction) async {
     try {
       final response = await _dio.post(
