@@ -26,6 +26,8 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr, BeforeValidator, ConfigDict
 from starlette.middleware.cors import CORSMiddleware
 
+from attraction_providers import StaticAttractionProvider
+
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
@@ -173,6 +175,23 @@ class Favorite(BaseDocument):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class Attraction(BaseDocument):
+    name: str
+    description: str
+    category: str
+    city: str
+    country: str
+    address: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    place_id: Optional[str] = None
+    rating: float
+    estimated_cost: float
+    images: List[str] = []
+    opening_hours: Optional[str] = None
+    external_url: Optional[str] = None
+
+
 # ---------- Request schemas ----------
 
 class RegisterIn(BaseModel):
@@ -269,6 +288,10 @@ class RAGQuestionIn(BaseModel):
 
 class RefineRequest(BaseModel):
     instruction: str = Field(min_length=3, max_length=500)
+
+
+def get_attraction_provider():
+    return StaticAttractionProvider(db.attractions)
 
 
 # ---------- Auth helpers ----------
@@ -1698,6 +1721,27 @@ async def share_trip(trip_id: str, user: dict = Depends(get_current_user)):
     return {"share_token": token}
 
 
+# ---------- Attractions ----------
+
+@api_router.get("/attractions")
+async def list_attractions(
+    city: str = Query(min_length=1),
+    category: Optional[str] = Query(default=None),
+):
+    provider = get_attraction_provider()
+    attractions = await provider.search(city, category)
+    return [attraction.model_dump() for attraction in attractions]
+
+
+@api_router.get("/attractions/{attraction_id}")
+async def get_attraction(attraction_id: str):
+    provider = get_attraction_provider()
+    attraction = await provider.get(attraction_id)
+    if attraction is None:
+        raise HTTPException(404, "Attraction not found")
+    return attraction.model_dump()
+
+
 # ---------- Favorites ----------
 
 @api_router.get("/trips/{trip_id}/favorites")
@@ -1884,6 +1928,7 @@ async def startup():
     await db.trips.create_index([("user_id", 1), ("deleted_at", 1)])
     await db.trips.create_index("share_token")
     await db.expenses.create_index("trip_id")
+    await db.attractions.create_index("city")
     await seed_admin()
 
 

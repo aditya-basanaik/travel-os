@@ -23,6 +23,9 @@
   },
   "devDependencies": {
     "@craco/craco": "^7.1.0",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "autoprefixer": "^10.4.20",
     "http-proxy-middleware": "^4.2.0",
     "postcss": "^8.4.49",
@@ -33,6 +36,11 @@
     "start": "craco start",
     "build": "craco build",
     "test": "craco test"
+  },
+  "jest": {
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/src/$1"
+    }
   },
   "browserslist": {
     "production": [

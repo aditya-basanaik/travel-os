@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:travel_os/core/theme/app_theme.dart';
 import 'package:travel_os/features/expenses/data/expenses_repository.dart';
+import 'package:travel_os/features/trips/data/attractions_repository.dart';
 import 'package:travel_os/features/trips/data/favorites_repository.dart';
 import 'package:travel_os/features/trips/data/trips_repository.dart';
 
@@ -24,7 +25,8 @@ class TripDetailScreen extends ConsumerStatefulWidget {
   ConsumerState<TripDetailScreen> createState() => _TripDetailScreenState();
 }
 
-class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with SingleTickerProviderStateMixin {
+class _TripDetailScreenState extends ConsumerState<TripDetailScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   late Future<Trip?> _tripFuture;
   Trip? _tripOverride;
@@ -35,7 +37,8 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
   bool _refiningItinerary = false;
   Map<String, dynamic>? _draftItinerary;
   final _refineController = TextEditingController();
-  final String _mapsApiKey = const String.fromEnvironment('MAPS_API_KEY', defaultValue: '');
+  final String _mapsApiKey =
+      const String.fromEnvironment('MAPS_API_KEY', defaultValue: '');
   final Set<Marker> _markers = {};
   GoogleMapController? _mapController;
 
@@ -64,7 +67,9 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
   Future<void> _saveItinerary() async {
     if (_draftItinerary == null) return;
     setState(() => _savingItinerary = true);
-    final updated = await ref.read(tripsRepositoryPrv).updateItinerary(widget.tripId, _draftItinerary!);
+    final updated = await ref
+        .read(tripsRepositoryPrv)
+        .updateItinerary(widget.tripId, _draftItinerary!);
     if (!mounted) return;
     setState(() {
       _savingItinerary = false;
@@ -74,7 +79,10 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
       }
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(updated == null ? 'Could not save itinerary.' : 'Itinerary updated.')),
+      SnackBar(
+          content: Text(updated == null
+              ? 'Could not save itinerary.'
+              : 'Itinerary updated.')),
     );
   }
 
@@ -82,7 +90,9 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
     final request = (instruction ?? _refineController.text).trim();
     if (request.length < 3 || _refiningItinerary) return;
     setState(() => _refiningItinerary = true);
-    final updated = await ref.read(tripsRepositoryPrv).refineItinerary(widget.tripId, request);
+    final updated = await ref
+        .read(tripsRepositoryPrv)
+        .refineItinerary(widget.tripId, request);
     if (!mounted) return;
     setState(() {
       _refiningItinerary = false;
@@ -92,13 +102,17 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
       }
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(updated == null ? 'Could not refine itinerary.' : 'Itinerary refined.')),
+      SnackBar(
+          content: Text(updated == null
+              ? 'Could not refine itinerary.'
+              : 'Itinerary refined.')),
     );
   }
 
   Future<void> _fetchWeather() async {
     try {
-      final forecast = await ref.read(tripsRepositoryPrv).getTripWeather(widget.tripId);
+      final forecast =
+          await ref.read(tripsRepositoryPrv).getTripWeather(widget.tripId);
       if (mounted) {
         setState(() {
           _weatherForecast = forecast;
@@ -160,7 +174,8 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator(color: AppTheme.primary)),
+            body: Center(
+                child: CircularProgressIndicator(color: AppTheme.primary)),
           );
         }
         final trip = _tripOverride ?? snapshot.data;
@@ -172,13 +187,19 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
         }
 
         if (_markers.isEmpty && (trip.itinerary?['days'] ?? []).isNotEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) => _configureMapMarkers(trip));
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _configureMapMarkers(trip));
         }
 
-        final itinerary = _editingItinerary ? (_draftItinerary ?? trip.itinerary ?? {}) : (trip.itinerary ?? {});
+        final itinerary = _editingItinerary
+            ? (_draftItinerary ?? trip.itinerary ?? {})
+            : (trip.itinerary ?? {});
         final days = List<Map<String, dynamic>>.from(itinerary['days'] ?? []);
-        final hotels = List<Map<String, dynamic>>.from(itinerary['hotels'] ?? []);
-        final restaurants = List<Map<String, dynamic>>.from(itinerary['restaurants'] ?? []);
+        final hotels =
+            List<Map<String, dynamic>>.from(itinerary['hotels'] ?? []);
+        final restaurants =
+            List<Map<String, dynamic>>.from(itinerary['restaurants'] ?? []);
+        final attractionsAsync = ref.watch(attractionsPrv(trip.destination));
 
         return Scaffold(
           body: DefaultTabController(
@@ -200,7 +221,10 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                           color: Colors.white,
                           fontSize: 22,
                           shadows: [
-                            const Shadow(color: Colors.black45, offset: Offset(0, 2), blurRadius: 4),
+                            const Shadow(
+                                color: Colors.black45,
+                                offset: Offset(0, 2),
+                                blurRadius: 4),
                           ],
                         ),
                       ),
@@ -235,14 +259,30 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                         unselectedLabelColor: AppTheme.mutedText,
                         indicatorColor: AppTheme.primary,
                         indicatorSize: TabBarIndicatorSize.tab,
-                        labelStyle: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 13),
+                        labelStyle: GoogleFonts.dmSans(
+                            fontWeight: FontWeight.bold, fontSize: 13),
                         tabs: const [
-                          Tab(text: 'Itinerary', icon: Icon(Icons.calendar_month_outlined, size: 20)),
-                          Tab(text: 'Hotels', icon: Icon(Icons.hotel_outlined, size: 20)),
-                          Tab(text: 'Dining', icon: Icon(Icons.restaurant_outlined, size: 20)),
-                          Tab(text: 'Attractions', icon: Icon(Icons.photo_camera_outlined, size: 20)),
-                          Tab(text: 'Map', icon: Icon(Icons.map_outlined, size: 20)),
-                          Tab(text: 'Expenses', icon: Icon(Icons.account_balance_wallet_outlined, size: 20)),
+                          Tab(
+                              text: 'Itinerary',
+                              icon: Icon(Icons.calendar_month_outlined,
+                                  size: 20)),
+                          Tab(
+                              text: 'Hotels',
+                              icon: Icon(Icons.hotel_outlined, size: 20)),
+                          Tab(
+                              text: 'Dining',
+                              icon: Icon(Icons.restaurant_outlined, size: 20)),
+                          Tab(
+                              text: 'Attractions',
+                              icon:
+                                  Icon(Icons.photo_camera_outlined, size: 20)),
+                          Tab(
+                              text: 'Map',
+                              icon: Icon(Icons.map_outlined, size: 20)),
+                          Tab(
+                              text: 'Expenses',
+                              icon: Icon(Icons.account_balance_wallet_outlined,
+                                  size: 20)),
                         ],
                       ),
                     ),
@@ -254,8 +294,10 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                 children: [
                   _buildItineraryTab(trip, days),
                   _buildHotelsTab(hotels, favoritesAsync.value ?? const []),
-                  _buildRestaurantsTab(restaurants, favoritesAsync.value ?? const []),
-                  _buildAttractionsTab(List<Map<String, dynamic>>.from(itinerary['attractions'] ?? []), favoritesAsync.value ?? const []),
+                  _buildRestaurantsTab(
+                      restaurants, favoritesAsync.value ?? const []),
+                  _buildAttractionsTab(
+                      attractionsAsync, favoritesAsync.value ?? const []),
                   _buildMapTab(trip),
                   _buildExpensesTab(trip),
                 ],
@@ -281,7 +323,8 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
         }
         final dayIndex = dIdx - 1;
         final day = days[dayIndex];
-        final activities = List<Map<String, dynamic>>.from(day['activities'] ?? []);
+        final activities =
+            List<Map<String, dynamic>>.from(day['activities'] ?? []);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -291,7 +334,8 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                     decoration: BoxDecoration(
                       color: AppTheme.primary,
                       borderRadius: BorderRadius.circular(20),
@@ -319,9 +363,10 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                 ],
               ),
             ),
-            
+
             // Vertical Timeline of Activities
-            ...activities.asMap().entries.map((entry) => _buildActivityTimelineRow(entry.value, dayIndex, entry.key)),
+            ...activities.asMap().entries.map((entry) =>
+                _buildActivityTimelineRow(entry.value, dayIndex, entry.key)),
             if (_editingItinerary)
               Align(
                 alignment: Alignment.centerLeft,
@@ -351,12 +396,18 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
             'estimated_cost': 0,
             'location': '',
           }
-        : Map<String, dynamic>.from(List<Map<String, dynamic>>.from(days[dayIndex]['activities'] ?? [])[activityIndex]);
-    final timeController = TextEditingController(text: existing['time']?.toString() ?? '12:00');
-    final titleController = TextEditingController(text: existing['title']?.toString() ?? '');
-    final descriptionController = TextEditingController(text: existing['description']?.toString() ?? '');
-    final costController = TextEditingController(text: '${existing['estimated_cost'] ?? 0}');
-    final locationController = TextEditingController(text: existing['location']?.toString() ?? '');
+        : Map<String, dynamic>.from(List<Map<String, dynamic>>.from(
+            days[dayIndex]['activities'] ?? [])[activityIndex]);
+    final timeController =
+        TextEditingController(text: existing['time']?.toString() ?? '12:00');
+    final titleController =
+        TextEditingController(text: existing['title']?.toString() ?? '');
+    final descriptionController =
+        TextEditingController(text: existing['description']?.toString() ?? '');
+    final costController =
+        TextEditingController(text: '${existing['estimated_cost'] ?? 0}');
+    final locationController =
+        TextEditingController(text: existing['location']?.toString() ?? '');
     var type = existing['type']?.toString() ?? 'activity';
 
     final result = await showDialog<Map<String, dynamic>>(
@@ -370,29 +421,59 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
               children: [
                 Row(
                   children: [
-                    Expanded(child: TextField(controller: timeController, decoration: const InputDecoration(labelText: 'Time'))),
+                    Expanded(
+                        child: TextField(
+                            controller: timeController,
+                            decoration:
+                                const InputDecoration(labelText: 'Time'))),
                     const SizedBox(width: 10),
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         value: type,
                         decoration: const InputDecoration(labelText: 'Type'),
-                        items: const ['activity', 'food', 'culture', 'nature', 'transport', 'stay', 'nightlife', 'relaxation', 'adventure']
-                            .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+                        items: const [
+                          'activity',
+                          'food',
+                          'culture',
+                          'nature',
+                          'transport',
+                          'stay',
+                          'nightlife',
+                          'relaxation',
+                          'adventure'
+                        ]
+                            .map((value) => DropdownMenuItem(
+                                value: value, child: Text(value)))
                             .toList(),
-                        onChanged: (value) => setDialogState(() => type = value ?? type),
+                        onChanged: (value) =>
+                            setDialogState(() => type = value ?? type),
                       ),
                     ),
                   ],
                 ),
-                TextField(controller: titleController, decoration: const InputDecoration(labelText: 'Title')),
-                TextField(controller: descriptionController, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
-                TextField(controller: locationController, decoration: const InputDecoration(labelText: 'Location')),
-                TextField(controller: costController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Estimated cost')),
+                TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(labelText: 'Title')),
+                TextField(
+                    controller: descriptionController,
+                    maxLines: 2,
+                    decoration:
+                        const InputDecoration(labelText: 'Description')),
+                TextField(
+                    controller: locationController,
+                    decoration: const InputDecoration(labelText: 'Location')),
+                TextField(
+                    controller: costController,
+                    keyboardType: TextInputType.number,
+                    decoration:
+                        const InputDecoration(labelText: 'Estimated cost')),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel')),
             FilledButton(
               onPressed: () {
                 final title = titleController.text.trim();
@@ -420,13 +501,17 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
     locationController.dispose();
     if (result == null || !mounted) return;
     final updatedDays = List<Map<String, dynamic>>.from(days);
-    final updatedActivities = List<Map<String, dynamic>>.from(updatedDays[dayIndex]['activities'] ?? []);
+    final updatedActivities = List<Map<String, dynamic>>.from(
+        updatedDays[dayIndex]['activities'] ?? []);
     if (activityIndex == null) {
       updatedActivities.add(result);
     } else {
       updatedActivities[activityIndex] = result;
     }
-    updatedDays[dayIndex] = {...updatedDays[dayIndex], 'activities': updatedActivities};
+    updatedDays[dayIndex] = {
+      ...updatedDays[dayIndex],
+      'activities': updatedActivities
+    };
     setState(() => _draftItinerary = {...draft, 'days': updatedDays});
   }
 
@@ -435,16 +520,24 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove activity?'),
-        content: const Text('This change will be applied when you save the itinerary.'),
+        content: const Text(
+            'This change will be applied when you save the itinerary.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Remove')),
         ],
       ),
     );
     if (confirmed != true || !mounted || _draftItinerary == null) return;
-    final days = List<Map<String, dynamic>>.from(_draftItinerary!['days'] ?? []);
-    final activities = List<Map<String, dynamic>>.from(days[dayIndex]['activities'] ?? [])..removeAt(activityIndex);
+    final days =
+        List<Map<String, dynamic>>.from(_draftItinerary!['days'] ?? []);
+    final activities =
+        List<Map<String, dynamic>>.from(days[dayIndex]['activities'] ?? [])
+          ..removeAt(activityIndex);
     days[dayIndex] = {...days[dayIndex], 'activities': activities};
     setState(() => _draftItinerary = {..._draftItinerary!, 'days': days});
   }
@@ -460,16 +553,20 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
   Future<void> _addDay(Trip trip) async {
     setState(() => _savingItinerary = true);
     try {
-      final updated = await ref.read(tripsRepositoryPrv).addItineraryDay(trip.id);
+      final updated =
+          await ref.read(tripsRepositoryPrv).addItineraryDay(trip.id);
       if (!mounted) return;
       if (updated == null) throw StateError('Could not add day');
       setState(() {
         _tripOverride = updated;
         _draftItinerary = updated.itinerary;
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Day added.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Day added.')));
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_dayOperationError(error))));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_dayOperationError(error))));
     } finally {
       if (mounted) setState(() => _savingItinerary = false);
     }
@@ -480,26 +577,36 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Remove day $dayNumber?'),
-        content: const Text('Its activities will also be removed and the remaining days will be renumbered.'),
+        content: const Text(
+            'Its activities will also be removed and the remaining days will be renumbered.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Remove')),
         ],
       ),
     );
     if (confirmed != true || !mounted) return;
     setState(() => _savingItinerary = true);
     try {
-      final updated = await ref.read(tripsRepositoryPrv).removeItineraryDay(trip.id, dayNumber);
+      final updated = await ref
+          .read(tripsRepositoryPrv)
+          .removeItineraryDay(trip.id, dayNumber);
       if (!mounted) return;
       if (updated == null) throw StateError('Could not remove day');
       setState(() {
         _tripOverride = updated;
         _draftItinerary = updated.itinerary;
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Day removed.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Day removed.')));
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_dayOperationError(error))));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_dayOperationError(error))));
     } finally {
       if (mounted) setState(() => _savingItinerary = false);
     }
@@ -522,9 +629,12 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
               const SizedBox(width: 10),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: _refiningItinerary ? null : () => _refineItinerary('Make it cheaper'),
+                  onPressed: _refiningItinerary
+                      ? null
+                      : () => _refineItinerary('Make it cheaper'),
                   icon: const Icon(Icons.auto_awesome, size: 18),
-                  label: Text(_refiningItinerary ? 'Refining...' : 'Make it cheaper'),
+                  label: Text(
+                      _refiningItinerary ? 'Refining...' : 'Make it cheaper'),
                 ),
               ),
             ],
@@ -550,7 +660,9 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _savingItinerary ? null : () => setState(() => _editingItinerary = false),
+                  onPressed: _savingItinerary
+                      ? null
+                      : () => setState(() => _editingItinerary = false),
                   child: const Text('Cancel'),
                 ),
               ),
@@ -569,7 +681,8 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
     );
   }
 
-  Widget _buildActivityTimelineRow(Map<String, dynamic> act, int dayIndex, int activityIndex) {
+  Widget _buildActivityTimelineRow(
+      Map<String, dynamic> act, int dayIndex, int activityIndex) {
     IconData getIcon(String? type) {
       switch (type?.toLowerCase()) {
         case 'food':
@@ -632,7 +745,8 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
               CircleAvatar(
                 radius: 16,
                 backgroundColor: AppTheme.secondary,
-                child: Icon(getIcon(act['type']), size: 16, color: AppTheme.primary),
+                child: Icon(getIcon(act['type']),
+                    size: 16, color: AppTheme.primary),
               ),
               const Expanded(child: SizedBox()),
             ],
@@ -668,21 +782,26 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                                 IconButton(
                                   tooltip: 'Edit activity',
                                   visualDensity: VisualDensity.compact,
-                                  onPressed: () => _showActivityEditor(dayIndex, activityIndex: activityIndex),
-                                  icon: const Icon(Icons.edit_outlined, size: 18),
+                                  onPressed: () => _showActivityEditor(dayIndex,
+                                      activityIndex: activityIndex),
+                                  icon:
+                                      const Icon(Icons.edit_outlined, size: 18),
                                 ),
                                 IconButton(
                                   tooltip: 'Remove activity',
                                   visualDensity: VisualDensity.compact,
-                                  onPressed: () => _removeActivity(dayIndex, activityIndex),
-                                  icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                                  onPressed: () =>
+                                      _removeActivity(dayIndex, activityIndex),
+                                  icon: const Icon(Icons.delete_outline,
+                                      size: 18, color: Colors.redAccent),
                                 ),
                               ],
                             ),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      if (act['image_url'] != null && act['image_url'].toString().trim().isNotEmpty) ...[
+                      if (act['image_url'] != null &&
+                          act['image_url'].toString().trim().isNotEmpty) ...[
                         ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: Image.network(
@@ -690,7 +809,8 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                             width: double.infinity,
                             height: 140,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                            errorBuilder: (context, error, stackTrace) =>
+                                const SizedBox.shrink(),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -703,15 +823,18 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                           height: 1.4,
                         ),
                       ),
-                      if (act['location'] != null && act['location'].toString().isNotEmpty) ...[
+                      if (act['location'] != null &&
+                          act['location'].toString().isNotEmpty) ...[
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            const Icon(Icons.location_on_outlined, size: 12, color: AppTheme.mutedText),
+                            const Icon(Icons.location_on_outlined,
+                                size: 12, color: AppTheme.mutedText),
                             const SizedBox(width: 4),
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => _launchUrl('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(act['location'])}'),
+                                onTap: () => _launchUrl(
+                                    'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(act['location'])}'),
                                 child: Text(
                                   act['location'],
                                   style: GoogleFonts.dmSans(
@@ -737,7 +860,8 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
     );
   }
 
-  Widget _buildHotelsTab(List<Map<String, dynamic>> hotels, List<Favorite> favorites) {
+  Widget _buildHotelsTab(
+      List<Map<String, dynamic>> hotels, List<Favorite> favorites) {
     if (hotels.isEmpty) {
       return const Center(child: Text('No hotel recommendations found.'));
     }
@@ -748,7 +872,7 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
       itemBuilder: (context, idx) {
         final hotel = hotels[idx];
         final amenities = List<String>.from(hotel['amenities'] ?? []);
-        
+
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 8),
           child: Padding(
@@ -771,11 +895,13 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                     ),
                     Row(
                       children: [
-                        const Icon(Icons.star_rounded, color: Colors.amber, size: 18),
+                        const Icon(Icons.star_rounded,
+                            color: Colors.amber, size: 18),
                         const SizedBox(width: 4),
                         Text(
                           '${hotel['rating'] ?? "4.0"}',
-                          style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 13),
+                          style: GoogleFonts.dmSans(
+                              fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                         _buildFavoriteButton('hotel', hotel, favorites),
                       ],
@@ -785,38 +911,48 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                 const SizedBox(height: 6),
                 Text(
                   hotel['description'] ?? '',
-                  style: GoogleFonts.dmSans(color: AppTheme.mutedText, fontSize: 13, height: 1.4),
+                  style: GoogleFonts.dmSans(
+                      color: AppTheme.mutedText, fontSize: 13, height: 1.4),
                 ),
                 const SizedBox(height: 12),
-                
+
                 // Amenities tags
                 Wrap(
                   spacing: 6,
                   runSpacing: 4,
-                  children: amenities.map((a) => Chip(
-                    label: Text(a, style: GoogleFonts.dmSans(fontSize: 10)),
-                    backgroundColor: AppTheme.secondary,
-                    side: BorderSide.none,
-                    shape: const StadiumBorder(),
-                    padding: EdgeInsets.zero,
-                  )).toList(),
+                  children: amenities
+                      .map((a) => Chip(
+                            label: Text(a,
+                                style: GoogleFonts.dmSans(fontSize: 10)),
+                            backgroundColor: AppTheme.secondary,
+                            side: BorderSide.none,
+                            shape: const StadiumBorder(),
+                            padding: EdgeInsets.zero,
+                          ))
+                      .toList(),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Footer
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
                       '~₹${hotel['price_per_night']?.toStringAsFixed(0) ?? "5000"}/night',
-                      style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, color: AppTheme.foreground, fontSize: 15),
+                      style: GoogleFonts.dmSans(
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.foreground,
+                          fontSize: 15),
                     ),
                     ElevatedButton(
-                      onPressed: () => _launchUrl('https://www.booking.com/searchresults.html?ss=${Uri.encodeComponent(hotel['name'])}'),
+                      onPressed: () => _launchUrl(
+                          'https://www.booking.com/searchresults.html?ss=${Uri.encodeComponent(hotel['name'])}'),
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
                       ),
-                      child: const Text('Book Now', style: TextStyle(fontSize: 12)),
+                      child: const Text('Book Now',
+                          style: TextStyle(fontSize: 12)),
                     ),
                   ],
                 ),
@@ -828,7 +964,8 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
     );
   }
 
-  Widget _buildRestaurantsTab(List<Map<String, dynamic>> restaurants, List<Favorite> favorites) {
+  Widget _buildRestaurantsTab(
+      List<Map<String, dynamic>> restaurants, List<Favorite> favorites) {
     if (restaurants.isEmpty) {
       return const Center(child: Text('No restaurant recommendations found.'));
     }
@@ -860,11 +997,13 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                     ),
                     Row(
                       children: [
-                        const Icon(Icons.star_rounded, color: Colors.amber, size: 18),
+                        const Icon(Icons.star_rounded,
+                            color: Colors.amber, size: 18),
                         const SizedBox(width: 4),
                         Text(
                           '${rest['rating'] ?? "4.0"}',
-                          style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 13),
+                          style: GoogleFonts.dmSans(
+                              fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                         _buildFavoriteButton('restaurant', rest, favorites),
                       ],
@@ -874,7 +1013,8 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                 const SizedBox(height: 6),
                 Text(
                   rest['description'] ?? '',
-                  style: GoogleFonts.dmSans(color: AppTheme.mutedText, fontSize: 13, height: 1.4),
+                  style: GoogleFonts.dmSans(
+                      color: AppTheme.mutedText, fontSize: 13, height: 1.4),
                 ),
                 const SizedBox(height: 16),
                 Row(
@@ -883,31 +1023,37 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
                             color: AppTheme.secondary,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             rest['cuisine'] ?? 'Local',
-                            style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.bold),
+                            style: GoogleFonts.dmSans(
+                                fontSize: 11, fontWeight: FontWeight.bold),
                           ),
                         ),
                         if (rest['veg_friendly'] == true) ...[
                           const SizedBox(width: 8),
                           const Tooltip(
                             message: 'Veg Friendly',
-                            child: Icon(Icons.eco_rounded, color: Colors.green, size: 18),
+                            child: Icon(Icons.eco_rounded,
+                                color: Colors.green, size: 18),
                           ),
                         ],
                       ],
                     ),
                     ElevatedButton(
-                      onPressed: () => _launchUrl('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(rest['name'])}'),
+                      onPressed: () => _launchUrl(
+                          'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(rest['name'])}'),
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
                       ),
-                      child: const Text('View Maps', style: TextStyle(fontSize: 12)),
+                      child: const Text('View Maps',
+                          style: TextStyle(fontSize: 12)),
                     ),
                   ],
                 ),
@@ -919,123 +1065,114 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
     );
   }
 
-  Widget _buildAttractionsTab(List<Map<String, dynamic>> attractions, List<Favorite> favorites) {
-    if (attractions.isEmpty) {
-      return const Center(child: Text('No attraction recommendations found.'));
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(20.0),
-      itemCount: attractions.length,
-      itemBuilder: (context, idx) {
-        final attraction = attractions[idx];
-        final location = attraction['location'];
-        final hasCoordinates = location is Map && location['latitude'] != null && location['longitude'] != null;
-        final locationLabel = hasCoordinates
-          ? '${location['latitude']}, ${location['longitude']}'
-          : attraction['destination']?.toString() ?? '';
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+  Widget _buildAttractionsTab(
+      AsyncValue<List<Attraction>> attractionsAsync, List<Favorite> favorites) {
+    return attractionsAsync.when(
+      loading: () => const Center(
+          child: CircularProgressIndicator(color: AppTheme.primary)),
+      error: (_, __) =>
+          const Center(child: Text('Could not load attractions.')),
+      data: (attractions) {
+        if (attractions.isEmpty) {
+          return const Center(
+              child: Text('No attractions found for this destination yet'));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(20),
+          itemCount: attractions.length,
+          itemBuilder: (context, index) {
+            final attraction = attractions[index];
+            final item = attraction.toMap();
+            final location = attraction.address.isNotEmpty
+                ? attraction.address
+                : '${attraction.latitude ?? ''}, ${attraction.longitude ?? ''}';
+            return Card(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.photo_camera_outlined, color: AppTheme.primary),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        attraction['name'] ?? '',
-                        style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.foreground),
-                      ),
+                    Row(
+                      children: [
+                        const Icon(Icons.photo_camera_outlined,
+                            color: AppTheme.primary),
+                        const SizedBox(width: 10),
+                        Expanded(
+                            child: Text(attraction.name,
+                                style: GoogleFonts.outfit(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold))),
+                        _buildFavoriteButton('attraction', item, favorites),
+                      ],
                     ),
-                    _buildFavoriteButton('attraction', attraction, favorites),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  attraction['description'] ?? '',
-                  style: GoogleFonts.dmSans(color: AppTheme.mutedText, fontSize: 13, height: 1.4),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 6,
-                  children: [
-                    if (attraction['category'] != null) Chip(label: Text('${attraction['category']}')),
-                    if (attraction['recommended_duration'] != null) Chip(label: Text('${attraction['recommended_duration']}')),
-                  ],
-                ),
-                if (locationLabel.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: () => _launchUrl('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent('${attraction['name']} $locationLabel')}'),
+                    const SizedBox(height: 8),
+                    Text(attraction.description,
+                        style: GoogleFonts.dmSans(
+                            color: AppTheme.mutedText,
+                            fontSize: 13,
+                            height: 1.4)),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 6,
+                      children: [
+                        Chip(label: Text(attraction.category)),
+                        Chip(label: Text('Rating ${attraction.rating}')),
+                        Chip(
+                            label:
+                                Text('Est. cost ${attraction.estimatedCost}')),
+                      ],
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _launchUrl(
+                          'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent('${attraction.name} $location')}'),
                       icon: const Icon(Icons.map_outlined, size: 18),
                       label: const Text('View Maps'),
                     ),
-                  ),
-                  if (_editingItinerary)
-                    IconButton(
-                      tooltip: 'Remove day',
-                      onPressed: _savingItinerary ? null : () => _removeDay(trip, day['day_number'] as int? ?? dayIndex + 1),
-                      icon: const Icon(Icons.delete_outline_rounded, color: AppTheme.accent),
-                    ),
-                ],
-              ],
-            ),
-              Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: _savingItinerary ? null : () => setState(() => _editingItinerary = false),
-                          child: const Text('Cancel'),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _savingItinerary ? null : _saveItinerary,
-                          icon: const Icon(Icons.check, size: 18),
-                          label: Text(_savingItinerary ? 'Saving...' : 'Save changes'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    onPressed: _savingItinerary ? null : () => _addDay(trip),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Add day'),
-                  ),
-                ],
+                  ],
+                ),
               ),
-        size: 20,
-      ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildFavoriteButton(
+      String type, Map<String, dynamic> item, List<Favorite> favorites) {
+    final name = item['name']?.toString() ?? '';
+    final favorite = favorites
+        .where((entry) => entry.type == type && entry.name == name)
+        .firstOrNull;
+    return IconButton(
+      icon: Icon(
+          favorite == null
+              ? Icons.favorite_border_rounded
+              : Icons.favorite_rounded,
+          color: AppTheme.accent),
+      tooltip: favorite == null ? 'Save to favorites' : 'Remove from favorites',
       onPressed: () async {
         final repository = ref.read(favoritesRepositoryPrv);
         final success = favorite == null
             ? await repository.addFavorite(
-                tripId: widget.tripId,
-                type: type,
-                name: name,
-                meta: item,
-              ) != null
+                    tripId: widget.tripId,
+                    type: type,
+                    name: name,
+                    externalId: item['id']?.toString(),
+                    meta: item) !=
+                null
             : await repository.removeFavorite(favorite.id);
         if (!mounted) return;
         if (success) {
           ref.invalidate(favoritesPrv(widget.tripId));
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(favorite == null ? 'Saved to favorites.' : 'Removed from favorites.')),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(favorite == null
+                  ? 'Saved to favorites.'
+                  : 'Removed from favorites.')));
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not update favorite.')),
-          );
+              const SnackBar(content: Text('Could not update favorite.')));
         }
       },
     );
@@ -1052,9 +1189,11 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
             final expenses = expensesSnapshot.data ?? const <Expense>[];
             final summary = summarySnapshot.data;
             final budget = summary?.budget ?? trip.budget;
-            final spent = summary?.spent ?? expenses.fold<double>(0, (total, item) => total + item.amount);
+            final spent = summary?.spent ??
+                expenses.fold<double>(0, (total, item) => total + item.amount);
             final remaining = summary?.remaining ?? budget - spent;
-            final progress = budget > 0 ? (spent / budget).clamp(0.0, 1.0) : 0.0;
+            final progress =
+                budget > 0 ? (spent / budget).clamp(0.0, 1.0) : 0.0;
 
             return ListView(
               padding: const EdgeInsets.all(20),
@@ -1065,22 +1204,44 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Budget usage', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, color: AppTheme.mutedText)),
+                        Text('Budget usage',
+                            style: GoogleFonts.dmSans(
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.mutedText)),
                         const SizedBox(height: 8),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('${trip.currency}${spent.toStringAsFixed(0)}', style: GoogleFonts.outfit(fontSize: 26, fontWeight: FontWeight.w800, color: AppTheme.primary)),
-                            Text('of ${trip.currency}${budget.toStringAsFixed(0)}', style: GoogleFonts.dmSans(color: AppTheme.mutedText)),
+                            Text('${trip.currency}${spent.toStringAsFixed(0)}',
+                                style: GoogleFonts.outfit(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppTheme.primary)),
+                            Text(
+                                'of ${trip.currency}${budget.toStringAsFixed(0)}',
+                                style: GoogleFonts.dmSans(
+                                    color: AppTheme.mutedText)),
                           ],
                         ),
                         const SizedBox(height: 12),
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: LinearProgressIndicator(value: progress, minHeight: 9, color: progress > .9 ? AppTheme.accent : AppTheme.primary, backgroundColor: AppTheme.secondary),
+                          child: LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 9,
+                              color: progress > .9
+                                  ? AppTheme.accent
+                                  : AppTheme.primary,
+                              backgroundColor: AppTheme.secondary),
                         ),
                         const SizedBox(height: 10),
-                        Text('Remaining: ${trip.currency}${remaining.toStringAsFixed(0)}', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, color: remaining < 0 ? AppTheme.accent : AppTheme.foreground)),
+                        Text(
+                            'Remaining: ${trip.currency}${remaining.toStringAsFixed(0)}',
+                            style: GoogleFonts.dmSans(
+                                fontWeight: FontWeight.bold,
+                                color: remaining < 0
+                                    ? AppTheme.accent
+                                    : AppTheme.foreground)),
                       ],
                     ),
                   ),
@@ -1089,48 +1250,74 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Expense history', style: GoogleFonts.outfit(fontSize: 19, fontWeight: FontWeight.bold)),
+                    Text('Expense history',
+                        style: GoogleFonts.outfit(
+                            fontSize: 19, fontWeight: FontWeight.bold)),
                     ElevatedButton.icon(
                       onPressed: () => _showExpenseEditor(trip),
                       icon: const Icon(Icons.add, size: 18),
                       label: const Text('Add'),
-                      style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8)),
+                      style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8)),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
                 if (expensesSnapshot.connectionState == ConnectionState.waiting)
-                  const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+                  const Center(
+                      child: CircularProgressIndicator(color: AppTheme.primary))
                 else if (expenses.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 40),
-                    child: Center(child: Text('No expenses recorded yet.', style: GoogleFonts.dmSans(color: AppTheme.mutedText))),
+                    child: Center(
+                        child: Text('No expenses recorded yet.',
+                            style:
+                                GoogleFonts.dmSans(color: AppTheme.mutedText))),
                   )
                 else
                   ...expenses.map((expense) => Card(
-                    margin: const EdgeInsets.symmetric(vertical: 5),
-                    child: ListTile(
-                      leading: CircleAvatar(backgroundColor: AppTheme.secondary, child: Icon(_expenseIcon(expense.category), color: AppTheme.primary, size: 20)),
-                      title: Text(expense.note?.isNotEmpty == true ? expense.note! : expense.category.toUpperCase(), style: GoogleFonts.dmSans(fontWeight: FontWeight.bold)),
-                      subtitle: Text('${expense.category}${expense.isPendingSync ? ' - pending sync' : ''}', style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.mutedText)),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('${trip.currency}${expense.amount.toStringAsFixed(0)}', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                          PopupMenuButton<String>(
-                            onSelected: (action) {
-                              if (action == 'edit') _showExpenseEditor(trip, expense: expense);
-                              if (action == 'delete') _deleteExpense(expense);
-                            },
-                            itemBuilder: (context) => const [
-                              PopupMenuItem(value: 'edit', child: Text('Edit')),
-                              PopupMenuItem(value: 'delete', child: Text('Delete')),
+                        margin: const EdgeInsets.symmetric(vertical: 5),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                              backgroundColor: AppTheme.secondary,
+                              child: Icon(_expenseIcon(expense.category),
+                                  color: AppTheme.primary, size: 20)),
+                          title: Text(
+                              expense.note?.isNotEmpty == true
+                                  ? expense.note!
+                                  : expense.category.toUpperCase(),
+                              style: GoogleFonts.dmSans(
+                                  fontWeight: FontWeight.bold)),
+                          subtitle: Text(
+                              '${expense.category}${expense.isPendingSync ? ' - pending sync' : ''}',
+                              style: GoogleFonts.dmSans(
+                                  fontSize: 12, color: AppTheme.mutedText)),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                  '${trip.currency}${expense.amount.toStringAsFixed(0)}',
+                                  style: GoogleFonts.outfit(
+                                      fontWeight: FontWeight.bold)),
+                              PopupMenuButton<String>(
+                                onSelected: (action) {
+                                  if (action == 'edit')
+                                    _showExpenseEditor(trip, expense: expense);
+                                  if (action == 'delete')
+                                    _deleteExpense(expense);
+                                },
+                                itemBuilder: (context) => const [
+                                  PopupMenuItem(
+                                      value: 'edit', child: Text('Edit')),
+                                  PopupMenuItem(
+                                      value: 'delete', child: Text('Delete')),
+                                ],
+                              ),
                             ],
                           ),
-                        ],
-                      ),
-                    ),
-                  )),
+                        ),
+                      )),
               ],
             );
           },
@@ -1155,7 +1342,8 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
   }
 
   Future<void> _showExpenseEditor(Trip trip, {Expense? expense}) async {
-    final amountController = TextEditingController(text: expense?.amount.toString() ?? '');
+    final amountController =
+        TextEditingController(text: expense?.amount.toString() ?? '');
     final noteController = TextEditingController(text: expense?.note ?? '');
     var category = expense?.category ?? 'food';
     const categories = ['food', 'stay', 'transport', 'activities', 'misc'];
@@ -1165,27 +1353,45 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
       backgroundColor: Colors.white,
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(20, 24, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+          padding: EdgeInsets.fromLTRB(
+              20, 24, 20, MediaQuery.of(context).viewInsets.bottom + 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(expense == null ? 'Add expense' : 'Edit expense', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text(expense == null ? 'Add expense' : 'Edit expense',
+                  style: GoogleFonts.outfit(
+                      fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 14),
-              TextField(controller: amountController, keyboardType: TextInputType.number, autofocus: expense == null, decoration: const InputDecoration(labelText: 'Amount')),
+              TextField(
+                  controller: amountController,
+                  keyboardType: TextInputType.number,
+                  autofocus: expense == null,
+                  decoration: const InputDecoration(labelText: 'Amount')),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
-                children: categories.map((value) => ChoiceChip(
-                  label: Text(value.toUpperCase()),
-                  selected: category == value,
-                  selectedColor: AppTheme.primary,
-                  labelStyle: TextStyle(color: category == value ? Colors.white : AppTheme.foreground, fontSize: 11, fontWeight: FontWeight.bold),
-                  onSelected: (_) => setSheetState(() => category = value),
-                )).toList(),
+                children: categories
+                    .map((value) => ChoiceChip(
+                          label: Text(value.toUpperCase()),
+                          selected: category == value,
+                          selectedColor: AppTheme.primary,
+                          labelStyle: TextStyle(
+                              color: category == value
+                                  ? Colors.white
+                                  : AppTheme.foreground,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold),
+                          onSelected: (_) =>
+                              setSheetState(() => category = value),
+                        ))
+                    .toList(),
               ),
               const SizedBox(height: 12),
-              TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Note (optional)')),
+              TextField(
+                  controller: noteController,
+                  decoration:
+                      const InputDecoration(labelText: 'Note (optional)')),
               const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: () async {
@@ -1193,9 +1399,18 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                   if (amount == null || amount <= 0) return;
                   final repository = ref.read(expensesRepositoryPrv);
                   final success = expense == null
-                      ? await repository.addExpense(tripId: trip.id, category: category, amount: amount, note: noteController.text.trim())
-                      : await repository.updateExpense(expense: expense, category: category, amount: amount, note: noteController.text.trim());
-                  if (sheetContext.mounted) Navigator.pop(sheetContext, success);
+                      ? await repository.addExpense(
+                          tripId: trip.id,
+                          category: category,
+                          amount: amount,
+                          note: noteController.text.trim())
+                      : await repository.updateExpense(
+                          expense: expense,
+                          category: category,
+                          amount: amount,
+                          note: noteController.text.trim());
+                  if (sheetContext.mounted)
+                    Navigator.pop(sheetContext, success);
                 },
                 child: Text(expense == null ? 'Save expense' : 'Save changes'),
               ),
@@ -1215,13 +1430,18 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
       builder: (context) => AlertDialog(
         title: const Text('Delete expense?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete')),
         ],
       ),
     );
     if (confirmed == true) {
-      final success = await ref.read(expensesRepositoryPrv).deleteExpense(expense.id);
+      final success =
+          await ref.read(expensesRepositoryPrv).deleteExpense(expense.id);
       if (success && mounted) setState(() {});
     }
   }
@@ -1237,11 +1457,15 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
           // Weather Row
           Text(
             'Weather Forecast',
-            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.foreground),
+            style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: AppTheme.foreground),
           ),
           const SizedBox(height: 12),
           _loadingWeather
-              ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
+              ? const Center(
+                  child: CircularProgressIndicator(color: AppTheme.primary))
               : _weatherForecast.isEmpty
                   ? Container(
                       padding: const EdgeInsets.all(16),
@@ -1251,7 +1475,8 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                       ),
                       child: Text(
                         'Weather forecast only available in real-time when API keys are configured.',
-                        style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.mutedText),
+                        style: GoogleFonts.dmSans(
+                            fontSize: 13, color: AppTheme.mutedText),
                       ),
                     )
                   : SizedBox(
@@ -1261,13 +1486,19 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                         children: days.map((d) {
                           final dateStr = d['date'] ?? '';
                           final weatherInfo = _weatherForecast[dateStr];
-                          final emoji = weatherInfo != null ? weatherInfo['emoji'] : '🌤️';
-                          final temp = weatherInfo != null && weatherInfo['temp'] != null ? '${weatherInfo['temp']}°C' : '--';
+                          final emoji = weatherInfo != null
+                              ? weatherInfo['emoji']
+                              : '🌤️';
+                          final temp =
+                              weatherInfo != null && weatherInfo['temp'] != null
+                                  ? '${weatherInfo['temp']}°C'
+                                  : '--';
 
                           // Format simple display date (e.g. Aug 15)
                           String dispDate = dateStr;
                           try {
-                            dispDate = DateFormat('MMM d').format(DateTime.parse(dateStr));
+                            dispDate = DateFormat('MMM d')
+                                .format(DateTime.parse(dateStr));
                           } catch (_) {}
 
                           return Container(
@@ -1276,32 +1507,45 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: const Color(0x0D000000)),
+                              border:
+                                  Border.all(color: const Color(0x0D000000)),
                             ),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text(dispDate, style: GoogleFonts.dmSans(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.mutedText)),
+                                Text(dispDate,
+                                    style: GoogleFonts.dmSans(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.mutedText)),
                                 const SizedBox(height: 4),
-                                Text(emoji, style: const TextStyle(fontSize: 22)),
+                                Text(emoji,
+                                    style: const TextStyle(fontSize: 22)),
                                 const SizedBox(height: 4),
-                                Text(temp, style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.foreground)),
+                                Text(temp,
+                                    style: GoogleFonts.dmSans(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.foreground)),
                               ],
                             ),
                           );
                         }).toList(),
                       ),
                     ),
-          
+
           const SizedBox(height: 28),
 
           // Map Placeholder / Blur overlay
           Text(
             'Interactive Map Route',
-            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.foreground),
+            style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                color: AppTheme.foreground),
           ),
           const SizedBox(height: 12),
-          
+
           // Typography map mockup
           ClipRRect(
             borderRadius: BorderRadius.circular(24),
@@ -1315,7 +1559,7 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                     fit: BoxFit.cover,
                   ),
                   Container(color: Colors.black.withOpacity(0.08)),
-                  
+
                   // Blur overlay card
                   Center(
                     child: Padding(
@@ -1325,22 +1569,26 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> with Single
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.85),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.white.withOpacity(0.5)),
+                          border:
+                              Border.all(color: Colors.white.withOpacity(0.5)),
                         ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.map_rounded, color: AppTheme.primary, size: 24),
+                            const Icon(Icons.map_rounded,
+                                color: AppTheme.primary, size: 24),
                             const SizedBox(height: 6),
                             Text(
                               'Interactive Map Route',
-                              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14),
+                              style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.bold, fontSize: 14),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               'Google Maps Platform API Key required for native mapping.',
                               textAlign: TextAlign.center,
-                              style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.mutedText),
+                              style: GoogleFonts.dmSans(
+                                  fontSize: 11, color: AppTheme.mutedText),
                             ),
                           ],
                         ),
@@ -1368,7 +1616,8 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   double get maxExtent => _tabBar.preferredSize.height;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
       color: Colors.white.withOpacity(0.95), // Premium translucent effect
       child: _tabBar,

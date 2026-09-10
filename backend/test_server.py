@@ -87,6 +87,24 @@ class InMemoryCollection:
             for document in self.documents
         )
 
+    def aggregate(self, pipeline):
+        matched = self.documents
+        for stage in pipeline:
+            if "$match" in stage:
+                matched = [
+                    document for document in matched
+                    if all(document.get(key) == value for key, value in stage["$match"].items())
+                ]
+            if "$group" in stage:
+                category_field = stage["$group"]["_id"].lstrip("$")
+                total_field = stage["$group"]["total"]["$sum"].lstrip("$")
+                totals = {}
+                for document in matched:
+                    category = document.get(category_field)
+                    totals[category] = totals.get(category, 0) + document.get(total_field, 0)
+                matched = [{"_id": category, "total": total} for category, total in totals.items()]
+        return InMemoryCursor(matched)
+
 
 class ServerUnitTests(unittest.IsolatedAsyncioTestCase):
     def test_password_hash_round_trip(self):
@@ -239,6 +257,7 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
         await self.client.aclose()
         for name, collection in self.original_collections.items():
             setattr(server.db, name, collection)
+
 
     async def test_register_me_refresh_and_bearer_auth(self):
         register = await self.client.post(
@@ -806,6 +825,242 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first.status_code, 200)
         self.assertEqual(second.status_code, 200)
         self.assertEqual(first.json()["id"], second.json()["id"])
+
+
+class AttractionHttpTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.original_attractions = server.db.attractions
+        server.db.attractions = InMemoryCollection()
+        self.client = httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=server.app),
+            base_url="http://testserver",
+        )
+        self.goan_beach = server.Attraction(
+            name="Baga Beach",
+            description="A lively beach",
+            category="beach",
+            city="Goa",
+            country="India",
+            address="Baga, Goa",
+            rating=4.3,
+            estimated_cost=0,
+        )
+        self.goan_fort = server.Attraction(
+            name="Aguada Fort",
+            description="A historic fort",
+            category="culture",
+            city="Goa",
+            country="India",
+            address="Candolim, Goa",
+            rating=4.5,
+            estimated_cost=100,
+        )
+        await server.db.attractions.insert_one(self.goan_beach.to_mongo())
+        await server.db.attractions.insert_one(self.goan_fort.to_mongo())
+
+    async def asyncTearDown(self):
+        await self.client.aclose()
+        server.db.attractions = self.original_attractions
+
+    async def test_attractions_can_be_filtered_by_city_and_category(self):
+        city_response = await self.client.get("/api/attractions", params={"city": "goa"})
+        category_response = await self.client.get(
+            "/api/attractions", params={"city": "Goa", "category": "beach"}
+        )
+
+        self.assertEqual(city_response.status_code, 200)
+        self.assertEqual(len(city_response.json()), 2)
+        self.assertEqual(category_response.status_code, 200)
+        self.assertEqual([item["name"] for item in category_response.json()], ["Baga Beach"])
+
+    async def test_unknown_city_returns_empty_list(self):
+        response = await self.client.get("/api/attractions", params={"city": "Reykjavik"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
+    async def test_attraction_detail_and_invalid_id(self):
+        valid = await self.client.get(f"/api/attractions/{self.goan_beach.id}")
+        invalid = await self.client.get("/api/attractions/does-not-exist")
+
+        self.assertEqual(valid.status_code, 200)
+        self.assertEqual(valid.json()["name"], "Baga Beach")
+        self.assertEqual(invalid.status_code, 404)
+
+
+class PhaseOneJourneyHttpTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.original_collections = {
+            "users": server.db.users,
+            "profiles": server.db.profiles,
+            "login_attempts": server.db.login_attempts,
+            "trips": server.db.trips,
+            "expenses": server.db.expenses,
+            "favorites": server.db.favorites,
+            "attractions": server.db.attractions,
+            "password_reset_tokens": server.db.password_reset_tokens,
+            "refresh_tokens": server.db.refresh_tokens,
+        }
+        for name in self.original_collections:
+            setattr(server.db, name, InMemoryCollection())
+        await server.db.attractions.insert_one(server.Attraction(
+            name="Baga Beach",
+            description="A lively beach",
+            category="beach",
+            city="Goa",
+            country="India",
+            address="Baga, Goa",
+            rating=4.3,
+            estimated_cost=0,
+        ).to_mongo())
+        self.client = httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=server.app),
+            base_url="http://testserver",
+        )
+
+    async def asyncTearDown(self):
+        await self.client.aclose()
+        for name, collection in self.original_collections.items():
+            setattr(server.db, name, collection)
+
+    async def test_realistic_phase_one_user_journey(self):
+        register = await self.client.post(
+            "/api/auth/register",
+            json={"name": "Journey Owner", "email": "journey-owner@example.com", "password": "password123"},
+        )
+        self.assertEqual(register.status_code, 200)
+        owner = register.json()
+        self.assertIn("access_token", self.client.cookies)
+        self.assertEqual((await self.client.get("/api/auth/me")).json()["id"], owner["id"])
+
+        original_refresh = self.client.cookies.get("refresh_token")
+        self.client.cookies.clear()
+        refreshed = await self.client.post(
+            "/api/auth/refresh",
+            headers={"Authorization": f"Bearer {original_refresh}"},
+        )
+        self.assertEqual(refreshed.status_code, 200)
+        rotated_refresh = refreshed.json()["refresh_token"]
+        self.assertNotEqual(rotated_refresh, original_refresh)
+        self.client.cookies.clear()
+        reused = await self.client.post(
+            "/api/auth/refresh",
+            headers={"Authorization": f"Bearer {original_refresh}"},
+        )
+        self.assertEqual(reused.status_code, 401)
+        self.client.cookies.set("access_token", refreshed.json()["access_token"])
+        self.client.cookies.set("refresh_token", rotated_refresh)
+
+        with patch.dict(os.environ, {"EMERGENT_LLM_KEY": ""}, clear=False), patch.object(
+            server, "call_llm", new_callable=AsyncMock
+        ) as llm:
+            planned = await self.client.post(
+                "/api/trips/plan",
+                json={
+                    "destination": "Goa",
+                    "start_date": "2026-01-29",
+                    "end_date": "2026-02-02",
+                    "budget": 10000,
+                    "currency": "₹",
+                    "people_count": 2,
+                    "interests": ["nature"],
+                },
+            )
+        self.assertEqual(planned.status_code, 200)
+        self.assertEqual(llm.await_count, 0)
+        trip = planned.json()
+        trip_id = trip["id"]
+        self.assertEqual(trip["destination"], "Goa")
+
+        deterministic_itinerary = {
+            "days": [
+                {"day_number": 1, "date": "2026-01-29", "activities": [{"type": "food", "estimated_cost": 100}]},
+                {"day_number": 2, "date": "2026-01-30", "activities": [{"type": "activity", "estimated_cost": 200}]},
+                {"day_number": 3, "date": "2026-01-31", "activities": [{"type": "transport", "estimated_cost": 300}]},
+                {"day_number": 4, "date": "2026-02-01", "activities": [{"type": "stay", "estimated_cost": 400}]},
+                {"day_number": 5, "date": "2026-02-02", "activities": [{"type": "activity", "estimated_cost": 500}]},
+            ],
+            "cost_breakdown": {"food": 100, "activities": 700, "transport": 300, "stay": 400},
+        }
+        updated = await self.client.put(f"/api/trips/{trip_id}/itinerary", json={"itinerary": deterministic_itinerary})
+        self.assertEqual(updated.status_code, 200)
+
+        added = await self.client.post(f"/api/trips/{trip_id}/itinerary/days")
+        self.assertEqual(added.status_code, 200)
+        added_days = added.json()["itinerary"]["days"]
+        self.assertEqual([(day["day_number"], day["date"]) for day in added_days], [
+            (1, "2026-01-29"), (2, "2026-01-30"), (3, "2026-01-31"),
+            (4, "2026-02-01"), (5, "2026-02-02"), (6, "2026-02-03"),
+        ])
+        self.assertEqual(added.json()["itinerary"]["estimated_cost"], 1500.0)
+
+        removed = await self.client.delete(f"/api/trips/{trip_id}/itinerary/days/3")
+        self.assertEqual(removed.status_code, 200)
+        removed_itinerary = removed.json()["itinerary"]
+        self.assertEqual([(day["day_number"], day["date"]) for day in removed_itinerary["days"]], [
+            (1, "2026-01-29"), (2, "2026-01-30"), (3, "2026-01-31"),
+            (4, "2026-02-01"), (5, "2026-02-02"),
+        ])
+        self.assertEqual(removed_itinerary["estimated_cost"], 1200.0)
+        self.assertEqual(removed_itinerary["cost_breakdown"], {"food": 100.0, "activities": 700.0, "transport": 0.0, "stay": 400.0})
+
+        hotel = await self.client.post(f"/api/trips/{trip_id}/favorites", json={"type": "hotel", "name": "Goa Stay"})
+        restaurant = await self.client.post(f"/api/trips/{trip_id}/favorites", json={"type": "restaurant", "name": "Goa Cafe"})
+        self.assertEqual(hotel.status_code, 200)
+        self.assertEqual(restaurant.status_code, 200)
+        favorites = await self.client.get("/api/favorites")
+        hotels = await self.client.get("/api/favorites", params={"type": "hotel"})
+        self.assertEqual({item["name"] for item in favorites.json()}, {"Goa Stay", "Goa Cafe"})
+        self.assertEqual([item["name"] for item in hotels.json()], ["Goa Stay"])
+
+        attractions = await self.client.get("/api/attractions", params={"city": "Goa"})
+        unknown_attractions = await self.client.get("/api/attractions", params={"city": "Reykjavik"})
+        self.assertEqual(attractions.status_code, 200)
+        self.assertEqual(attractions.json()[0]["city"], "Goa")
+        self.assertIn("rating", attractions.json()[0])
+        self.assertIn("estimated_cost", attractions.json()[0])
+        self.assertEqual(unknown_attractions.status_code, 200)
+        self.assertEqual(unknown_attractions.json(), [])
+
+        expense = await self.client.post(f"/api/trips/{trip_id}/expenses", json={"category": "food", "amount": 250})
+        summary = await self.client.get(f"/api/trips/{trip_id}/expenses/summary")
+        self.assertEqual(expense.status_code, 200)
+        self.assertEqual(summary.json()["budget"], 10000)
+        self.assertEqual(summary.json()["spent"], 250)
+        self.assertEqual(summary.json()["remaining"], 9750)
+
+        self.client.cookies.clear()
+        second_register = await self.client.post(
+            "/api/auth/register",
+            json={"name": "Second User", "email": "journey-second@example.com", "password": "password123"},
+        )
+        self.assertEqual(second_register.status_code, 200)
+        self.assertEqual((await self.client.get(f"/api/trips/{trip_id}")).status_code, 404)
+        self.assertEqual((await self.client.get(f"/api/trips/{trip_id}/expenses")).status_code, 404)
+        self.assertEqual((await self.client.get(f"/api/trips/{trip_id}/favorites")).status_code, 404)
+        self.assertEqual((await self.client.delete(f"/api/favorites/{hotel.json()['id']}")).status_code, 404)
+
+    async def test_legacy_string_day_numbers_survive_add_and_remove(self):
+        register = await self.client.post(
+            "/api/auth/register",
+            json={"name": "Legacy Journey", "email": "journey-legacy@example.com", "password": "password123"},
+        )
+        trip = server.Trip(
+            user_id=register.json()["id"], title="Legacy", destination="Goa",
+            start_date="2026-01-29", end_date="2026-02-02", budget=10000,
+            itinerary={"days": [
+                {"day_number": "1", "date": "2026-01-29", "activities": []},
+                {"day_number": "2", "date": "2026-01-30", "activities": []},
+                {"day_number": "3", "date": "2026-01-31", "activities": []},
+            ], "cost_breakdown": {}},
+        )
+        await server.db.trips.insert_one(trip.to_mongo())
+        removed = await self.client.delete(f"/api/trips/{trip.id}/itinerary/days/2")
+        added = await self.client.post(f"/api/trips/{trip.id}/itinerary/days")
+        self.assertEqual(removed.status_code, 200)
+        self.assertEqual(added.status_code, 200)
+        self.assertEqual([day["day_number"] for day in added.json()["itinerary"]["days"]], [1, 2, 3])
+        self.assertEqual([day["date"] for day in added.json()["itinerary"]["days"]], ["2026-01-29", "2026-01-30", "2026-01-31"])
 
 
 if __name__ == "__main__":

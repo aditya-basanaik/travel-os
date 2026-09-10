@@ -9,8 +9,20 @@ const bookingUrl = (name, dest) => `https://www.booking.com/searchresults.html?s
 
 export default function PlacesTab({ trip, type }) {
   const listKey = type === "hotel" ? "hotels" : type === "restaurant" ? "restaurants" : "attractions";
-  const items = trip.itinerary?.[listKey] || [];
   const [favs, setFavs] = useState([]);
+  const [attractions, setAttractions] = useState(null);
+  const [attractionError, setAttractionError] = useState("");
+
+  useEffect(() => {
+    if (type !== "attraction") return;
+    setAttractions(null);
+    setAttractionError("");
+    api.get("/attractions", { params: { city: trip.destination } })
+      .then(({ data }) => setAttractions(data))
+      .catch((e) => setAttractionError(fmtErr(e)));
+  }, [trip.destination, type]);
+
+  const items = type === "attraction" ? (attractions || []) : (trip.itinerary?.[listKey] || []);
 
   useEffect(() => {
     api.get(`/trips/${trip.id}/favorites`).then(({ data }) => setFavs(data)).catch(() => {});
@@ -26,17 +38,25 @@ export default function PlacesTab({ trip, type }) {
         setFavs(favs.filter((f) => f.id !== fav.id));
         toast.success("Removed from favorites");
       } else {
-        const { data } = await api.post(`/trips/${trip.id}/favorites`, { type, name: item.name, meta: item });
+        const { data } = await api.post(`/trips/${trip.id}/favorites`, { type, name: item.name, external_id: item.id, meta: item });
         setFavs([...favs, data]);
         toast.success("Saved to favorites");
       }
     } catch (e) { toast.error(fmtErr(e)); }
   };
 
+  if (type === "attraction" && attractions === null && !attractionError) {
+    return <div className="bg-secondary/60 rounded-3xl p-10 text-center text-muted-foreground" data-testid="attractions-loading">Loading attractions...</div>;
+  }
+
+  if (attractionError) {
+    return <div className="bg-secondary/60 rounded-3xl p-10 text-center text-destructive" data-testid="attractions-error">{attractionError}</div>;
+  }
+
   if (items.length === 0) {
     return (
       <div className="bg-secondary/60 rounded-3xl p-10 text-center" data-testid={`${type}s-empty`}>
-        <p className="text-muted-foreground">No {type === "hotel" ? "hotel" : type === "restaurant" ? "restaurant" : "attraction"} recommendations on this trip yet.</p>
+        <p className="text-muted-foreground">{type === "attraction" ? "No attractions found for this destination yet" : `No ${type === "hotel" ? "hotel" : "restaurant"} recommendations on this trip yet.`}</p>
       </div>
     );
   }
@@ -81,6 +101,9 @@ export default function PlacesTab({ trip, type }) {
               )}
               {type === "attraction" && item.recommended_duration && (
                 <span className="bg-secondary rounded-full px-3 py-1 text-xs font-bold">{item.recommended_duration}</span>
+              )}
+              {type === "attraction" && item.estimated_cost != null && (
+                <span className="bg-secondary rounded-full px-3 py-1 text-xs font-bold">Est. cost {trip.currency}{Number(item.estimated_cost).toLocaleString()}</span>
               )}
               {(item.amenities || []).slice(0, 3).map((a) => (
                 <span key={a} className="bg-secondary rounded-full px-3 py-1 text-xs">{a}</span>
