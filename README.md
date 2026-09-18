@@ -1,92 +1,86 @@
 # Travel OS
 
-Travel OS is a travel-planning MVP with a React web app, a Flutter mobile app, a FastAPI backend, and MongoDB persistence.
+Travel OS is a travel-planning MVP for creating AI-assisted itineraries, editing trips day by day, saving recommendations, tracking expenses, and sharing read-only trip links. It has a React web client, a Flutter mobile client, and a FastAPI/MongoDB backend.
 
-## Current stack
+## Current feature set
 
-- Web: React + CRACO + Tailwind
-- Mobile: Flutter + Riverpod + GoRouter
-- Backend: FastAPI + MongoDB + JWT auth
-- AI: itinerary generation and refinement with a server-side Claude fallback
-- Maps: native Google Maps foundation is in progress, with a safe fallback preserved when no key is configured
+- Email registration, login, logout, refresh, protected sessions, password hashing, failed-login lockout, and password reset.
+- Google ID-token authentication for web and Android, with provider-backed configuration.
+- Profile preferences, AI itinerary generation and refinement, deterministic fallback planning, and natural-language trip requests.
+- Itinerary activity editing plus add/remove day management, including legacy day-number normalization.
+- Global favorites for hotels, restaurants, and attractions; attraction models and provider abstractions are implemented.
+- Trip search, duplicate, soft-delete, restore, read-only sharing, weather when configured, expenses, and limited offline expense queues.
+- Help assistant backed by the versioned FAQ knowledge base, with grounded fallback responses.
+
+Hotels, restaurants, and attractions are not live inventory. Recommendations and prices are AI-generated or static demo data. External Maps links and the mobile Maps foundation remain available, but interactive Google Maps, routes, directions, and nearby search are intentionally frozen/postponed for this phase. Do not enable or extend Maps without a dedicated future milestone.
+
+## Stack
+
+- Backend: Python, FastAPI, Pydantic, Uvicorn, Motor/PyMongo, bcrypt, PyJWT, HTTPX tests.
+- Web: React 18, React Router, Axios, CRACO/Create React App, Tailwind CSS, Radix UI, Framer Motion, Phosphor icons, Sonner.
+- Mobile: Flutter/Dart, Riverpod, GoRouter, Dio, Flutter Secure Storage, Shared Preferences, Google Fonts, URL Launcher, and the frozen Google Maps foundation.
+- Persistence: MongoDB, with itineraries embedded in `trips` documents.
+- AI and enrichment: server-side Claude through Emergent Universal Key; optional Unsplash and OpenWeather integrations.
 
 ## Local development
 
-### Backend
+Create `backend/.env` from [backend/.env.example](backend/.env.example), then provide MongoDB and the required development values there.
 
-From the project root:
-
-```bash
+```powershell
 cd backend
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 python -m uvicorn server:app --host 0.0.0.0 --port 8001
 ```
 
-Required env values include:
+The template documents required values such as `MONGO_URL`, `DB_NAME`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `EMERGENT_LLM_KEY`, plus optional OAuth, CORS, image, weather, and SMTP settings. Keep secrets in `.env`; do not duplicate them in documentation or commit them.
 
-- `ENV`
-- `MONGO_URL`
-- `DB_NAME`
-- `JWT_SECRET`
-- `ADMIN_EMAIL`
-- `ADMIN_PASSWORD`
-- `EMERGENT_LLM_KEY`
-- `GOOGLE_OAUTH_CLIENT_IDS`
+### Web
 
-Production password reset delivery additionally requires `SMTP_HOST`, `SMTP_PORT`,
-`SMTP_USERNAME`, `SMTP_PASSWORD`, and `RESET_EMAIL_FROM`. Development mode returns
-a local reset link for testing; production never returns reset tokens in the API response.
-Use [backend/.env.example](backend/.env.example) as the configuration template.
-
-For direct web Google login, set `REACT_APP_GOOGLE_CLIENT_ID` in
-[frontend/.env.example](frontend/.env.example), and include the same web client ID
-in the backend `GOOGLE_OAUTH_CLIENT_IDS` list. In Google Cloud Console, add the web
-origin (`http://localhost:3000` locally and the production HTTPS origin when deployed)
-to authorized JavaScript origins. Publish the OAuth consent screen or add the app's
-production audience so accounts are not limited to test users.
-
-### Web frontend
-
-```bash
+```powershell
 cd frontend
 npm install
 npm start
 ```
 
-### Mobile app
+The web client uses `http://localhost:8001/api` by default. Set `REACT_APP_BACKEND_URL` when the backend is elsewhere. Google web login additionally uses `REACT_APP_GOOGLE_CLIENT_ID`.
 
-```bash
+### Mobile
+
+```powershell
 cd mobile
 flutter pub get
-flutter build apk --debug \
-	--dart-define=TRAVEL_OS_API_URL=http://172.19.47.12:8001 \
-	--dart-define=GOOGLE_SERVER_CLIENT_ID=YOUR_WEB_CLIENT_ID.apps.googleusercontent.com \
-	--dart-define=MAPS_API_KEY=YOUR_ANDROID_MAPS_KEY
+flutter run --dart-define=TRAVEL_OS_API_URL=http://10.0.2.2:8001
 ```
 
-## Current milestone status
+For a physical device, use a reachable host address. Optional build defines include `GOOGLE_SERVER_CLIENT_ID`, `TRAVEL_OS_WEB_URL`, and the frozen `MAPS_API_KEY` foundation.
 
-- Auth and session flow are stable and intentionally left unchanged during the polish pass.
-- The working trip, planning, dashboard, favorites, expenses, sharing, restore, and help flows remain intact.
-- The AI trip planner now skips the remote Claude call when `EMERGENT_LLM_KEY` is missing and immediately uses the local deterministic itinerary fallback instead of hanging.
-- The planner accepts natural-language requests through the web and Flutter clients and routes them through the validated structured planner at `/api/trips/plan/natural`.
-- UI polish is being applied to the core app shell and dashboard surfaces without altering request logic or auth behavior.
-- The mobile trip map remains a safe placeholder/foundation only; Google Maps remains intentionally deferred.
-- Existing features remain intact and are not being replaced wholesale.
+## Tests
 
-## Current polish pass
+```powershell
+cd backend
+python -m unittest discover -s . -p "test_*.py" -v
 
-- Tightened spacing and surface treatment around the main dashboard and app shell.
-- Improved visual hierarchy using the current forest-and-earth palette without changing flows or endpoints.
-- Kept documentation in sync with the current stable state as the app evolves.
+cd ..\frontend
+npm test -- --watchAll=false --runInBand
 
-## Project documentation
+cd ..\mobile
+flutter analyze
+flutter test
+```
 
-- [PROJECT_STATE.md](PROJECT_STATE.md) tracks the reconstructed source-of-truth state.
-- [AI_HANDOFF.md](AI_HANDOFF.md) records the current handoff and known risks.
+Current passing counts are 40 backend tests, 10 frontend tests, and 7 Flutter tests. Flutter analysis has 10 remaining diagnostics, all documented for manual review in the handoff; there are no analyzer errors.
 
-## Notes
+## Project structure
 
-- Development auth cookies are HTTP-friendly for localhost testing.
-- Production auth should use secure cookie settings and validated CORS configuration.
-- Google Maps and backend keys must never be committed to source control.
+- `backend/server.py`: FastAPI routes, models, auth, AI planning, favorites, attractions, itinerary operations, and persistence.
+- `backend/auth_providers.py` and `backend/attraction_providers.py`: provider abstractions and integrations.
+- `backend/seed_attractions.py`: manual demo-attraction seed script.
+- `backend/migrate_day_numbers.py`: manual legacy itinerary day-number migration, with `--dry-run`.
+- `backend/test_server.py`: backend unit and HTTP regression suite.
+- `frontend/src/`: React routes, pages, shared shell, API client, and trip components.
+- `frontend/src/pages/*.test.jsx` and `frontend/src/components/trip/ItineraryTab.test.jsx`: frontend tests.
+- `mobile/lib/`: Flutter routing, theme, repositories, providers, and screens.
+- `mobile/test/`: Flutter widget and phase-one regression tests.
+- `memory/PRD.md`: historical product notes; implementation and these docs are authoritative.
+
+See [PROJECT_STATE.md](PROJECT_STATE.md) for the current audit snapshot and [AI_HANDOFF.md](AI_HANDOFF.md) for continuation guidance.

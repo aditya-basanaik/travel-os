@@ -105,7 +105,7 @@ class _AIPlannerScreenState extends ConsumerState<AIPlannerScreen> {
       setState(() => _isGenerating = false);
       if (trip != null) {
         // Refresh the provider so the new trip shows in lists
-        ref.refresh(userTripsPrv);
+        ref.invalidate(userTripsPrv);
         // Navigate to the trip detail view
         context.go('/trips/${trip.id}');
       } else {
@@ -132,7 +132,7 @@ class _AIPlannerScreenState extends ConsumerState<AIPlannerScreen> {
     if (!mounted) return;
     setState(() => _isGenerating = false);
     if (trip != null) {
-      ref.refresh(userTripsPrv);
+      ref.invalidate(userTripsPrv);
       context.go('/trips/${trip.id}');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(

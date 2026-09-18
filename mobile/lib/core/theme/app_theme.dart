@@ -14,20 +14,18 @@ class AppTheme {
   static const Color mutedText = Color(0xFF6B6559); // Warmer gray
 
   static ThemeData get lightTheme {
-    final baseTheme = ThemeData.light();
+    final baseTheme = ThemeData.light(useMaterial3: true);
 
     return baseTheme.copyWith(
-      useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
         seedColor: primary,
         primary: primary,
         secondary: secondary,
         tertiary: accent,
-        background: background,
         surface: cardBg,
         onPrimary: Colors.white,
         onSecondary: foreground,
-        onBackground: foreground,
+        onSurface: foreground,
       ),
       scaffoldBackgroundColor: background,
       cardTheme: CardTheme(
