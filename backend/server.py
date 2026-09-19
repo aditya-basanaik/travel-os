@@ -13,6 +13,7 @@ import hashlib
 import logging
 import math
 import smtplib
+from urllib.parse import quote
 from email.message import EmailMessage
 from datetime import datetime, timezone, timedelta
 from typing import Annotated, Optional, List
@@ -602,25 +603,20 @@ def grounded_rag_fallback(documents: list[dict]) -> str:
 
 
 async def call_rag_llm(question: str, documents: list[dict]) -> str:
-    from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone  # pyright: ignore[reportMissingImports]
+    import anthropic
     context = "\n\n".join(f"[{document['title']}]\n{document['content']}" for document in documents)
-    chat = LlmChat(
-        api_key=os.environ["EMERGENT_LLM_KEY"],
-        session_id=f"rag-{uuid.uuid4()}",
-        system_message=(
+    client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    response = await client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=4096,
+        system=(
             "You are the Travel OS product help assistant. Answer only from the supplied Travel OS documents. "
             "Do not invent policies, capabilities, prices, live availability, or guarantees. If the documents do not answer the question, "
             "say that you do not have enough information. Keep the answer concise and practical."
         ),
-    ).with_model("anthropic", "claude-sonnet-4-6")
-    chunks = []
-    prompt = f"Travel OS documents:\n{context}\n\nUser question: {question}"
-    async for event in chat.stream_message(UserMessage(text=prompt)):
-        if isinstance(event, TextDelta):
-            chunks.append(event.content)
-        elif isinstance(event, StreamDone):
-            break
-    return "".join(chunks).strip()
+        messages=[{"role": "user", "content": f"Travel OS documents:\n{context}\n\nUser question: {question}"}],
+    )
+    return response.content[0].text.strip()
 
 
 @api_router.post("/rag/ask")
@@ -633,7 +629,7 @@ async def ask_rag(body: RAGQuestionIn, user: dict = Depends(get_current_user)):
         }
 
     answer = None
-    if os.environ.get("EMERGENT_LLM_KEY"):
+    if os.environ.get("ANTHROPIC_API_KEY"):
         try:
             answer = await asyncio.wait_for(call_rag_llm(body.question, documents), timeout=60)
         except Exception as error:
@@ -812,6 +808,48 @@ def get_activity_image(query: str, cache: dict | None = None, used: set | None =
         return pick_cover(query)
 
 
+def _image_source(image_url: str) -> str:
+    if "wikipedia.org" in (image_url or "") or "wikimedia.org" in (image_url or ""):
+        return "wikipedia"
+    if "unsplash.com" in (image_url or ""):
+        return "unsplash"
+    return "generic"
+
+
+def get_location_image(name: str, destination: str, activity_type: str) -> str:
+    """Resolve a relevant image, preferring named landmark photos over generic covers."""
+    location_name = (name or "").strip()
+    destination = (destination or "").strip()
+    kind = (activity_type or "").strip().lower()
+    if kind in {"attraction", "culture", "nature"} and location_name:
+        wiki_names = [location_name]
+        first_part = re.split(r"[,;/]", location_name)[0].strip()
+        if first_part and first_part != location_name:
+            wiki_names.append(first_part)
+        for title in wiki_names:
+            try:
+                response = requests.get(
+                    f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote(title, safe='')}",
+                    headers={"User-Agent": os.environ.get("WIKIPEDIA_USER_AGENT", "TravelOS/1.0 (contact: your-project-contact)")},
+                    timeout=3,
+                )
+                if response.status_code != 200:
+                    continue
+                summary = response.json()
+                if summary.get("type") == "disambiguation":
+                    continue
+                image = (summary.get("originalimage") or {}).get("source") or (summary.get("thumbnail") or {}).get("source")
+                if image:
+                    return image
+            except (requests.RequestException, ValueError, TypeError):
+                continue
+
+    query = " ".join(part for part in [location_name, destination] if part).strip()
+    if query:
+        return get_activity_image(query)
+    return pick_cover(destination)
+
+
 def generate_local_itinerary(destination: str, start_date: str, end_date: str, budget: float, currency: str, people_count: int, interests: List[str]) -> dict:
     start = datetime.strptime(start_date, "%Y-%m-%d")
     end = datetime.strptime(end_date, "%Y-%m-%d")
@@ -953,27 +991,22 @@ def generate_local_itinerary(destination: str, start_date: str, end_date: str, b
 
 
 async def call_llm(prompt: str) -> str:
-    api_key = os.environ.get("EMERGENT_LLM_KEY", "").strip()
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
-        raise RuntimeError("EMERGENT_LLM_KEY is not configured")
+        raise RuntimeError("ANTHROPIC_API_KEY is not configured")
 
-    from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, StreamDone  # pyright: ignore[reportMissingImports]
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"plan-{uuid.uuid4()}",
-        system_message="You are an expert travel planner. You respond ONLY with valid JSON — no markdown, no commentary.",
-    ).with_model("anthropic", "claude-sonnet-4-6")
-    chunks = []
-
-    async def consume():
-        async for ev in chat.stream_message(UserMessage(text=prompt)):
-            if isinstance(ev, TextDelta):
-                chunks.append(ev.content)
-            elif isinstance(ev, StreamDone):
-                break
-
-    await asyncio.wait_for(consume(), timeout=180)
-    return "".join(chunks)
+    import anthropic
+    client = anthropic.AsyncAnthropic(api_key=api_key)
+    response = await asyncio.wait_for(
+        client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=8192,
+            system="You are an expert travel planner. You respond ONLY with valid JSON — no markdown, no commentary.",
+            messages=[{"role": "user", "content": prompt}],
+        ),
+        timeout=180,
+    )
+    return response.content[0].text
 
 
 def parse_itinerary_json(text: str) -> dict:
@@ -1223,22 +1256,24 @@ Rules:
 - Include 3-5 hotels across price ranges and 4-6 restaurants matching the interests (veg-friendly options if food is an interest).
 - Use real, well-known places in {body.destination} wherever possible."""
 
-    llm_ready = bool(os.environ.get("EMERGENT_LLM_KEY", "").strip())
+    llm_ready = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
     itinerary = None
     last_error = None
+    ai_generated = False
     if llm_ready:
         for attempt in range(2):
             try:
                 raw = await call_llm(prompt)
                 itinerary = validate_planned_itinerary(parse_itinerary_json(raw), nights + 1, body.start_date, body.budget)
+                ai_generated = True
                 break
             except Exception as e:
                 last_error = e
                 logger.warning(f"AI itinerary attempt {attempt + 1} failed: {e}")
     else:
-        logger.info("EMERGENT_LLM_KEY missing; skipping remote AI generation and using local itinerary fallback")
+        logger.error("ANTHROPIC_API_KEY missing; skipping Claude generation and using local itinerary fallback")
     if itinerary is None:
-        logger.warning(f"Using local itinerary fallback after LLM failure: {last_error}")
+        logger.error(f"Using local itinerary fallback after Claude failure: {last_error}")
         itinerary = validate_planned_itinerary(
             generate_local_itinerary(body.destination, body.start_date, body.end_date, body.budget, body.currency, body.people_count, body.interests),
             nights + 1,
@@ -1247,84 +1282,22 @@ Rules:
         )
 
     itinerary.setdefault("attractions", [])
+    itinerary["ai_generated"] = ai_generated
 
-    # Enrich activities with image URLs (per-request cache to avoid duplicate Unsplash calls)
+    # Enrich every activity with a location image and transparent source metadata.
     try:
-        _img_cache = {}
-        _used_imgs = set()
-        image_lookup_budget = 4
-        GENERIC_TITLES = {"breakfast and check-in", "lunch break", "dinner and evening stroll", "main attraction visit", "market or neighborhood walk", "sunrise or early city walk"}
+        _location_cache = {}
         for d in itinerary.get("days", []):
             for a in d.get("activities", []):
                 title = (a.get("title") or "").strip()
                 location = (a.get("location") or "").strip()
                 dest = (body.destination or "").strip()
-                low_title = title.lower()
-
-                # Try a set of locality-focused queries first (increase chance of destination-relevant images)
-                primary_q = location or dest
-                img_url = None
-                if primary_q:
-                    # split comma/semicolon-separated place strings into tokens and try each token first
-                    parts = [p.strip() for p in re.split('[,;/]', primary_q) if p.strip()]
-                    variants = []
-                    for p in parts:
-                        variants.extend([f"{p} skyline", f"{p} landmark", f"{p} landscape", f"{p} city", p])
-                    # finally try the full primary_q as-is
-                    variants.append(primary_q)
-                    for v in variants:
-                        if image_lookup_budget <= 0:
-                            break
-                        try:
-                            candidate = get_activity_image(v, _img_cache, _used_imgs)
-                            image_lookup_budget -= 1
-                            if candidate and candidate not in COVERS.values():
-                                img_url = candidate
-                                break
-                            # if candidate is a cover, keep searching variants
-                        except Exception:
-                            continue
-
-                # If no locality image found, try richer queries combining title, type and tokens
-                if not img_url:
-                    tried = set()
-                    candidates = build_activity_image_candidates(title, location, dest, a.get("type"))
-
-                    parts_full = [title, location, dest]
-                    combined = " ".join([p for p in parts_full if p]).strip()
-                    if combined:
-                        candidates.append(combined)
-
-                    # try candidates in order
-                    for q in candidates:
-                        if image_lookup_budget <= 0:
-                            break
-                        qkey = q.lower()
-                        if qkey in tried:
-                            continue
-                        tried.add(qkey)
-                        try:
-                            candidate = get_activity_image(q, _img_cache, _used_imgs)
-                            image_lookup_budget -= 1
-                            if candidate and candidate not in COVERS.values():
-                                img_url = candidate
-                                break
-                        except Exception:
-                            continue
-
-                chosen = img_url or pick_cover(body.destination)
-                # Debug logs intentionally kept concise to aid troubleshooting without flooding the server logs.
-                try:
-                    print(f"DEBUG image selection: title={title!r} location={location!r} dest={dest!r} img_url={img_url!r} chosen={chosen!r}")
-                except Exception:
-                    pass
-                if chosen in COVERS.values():
-                    for alt in COVERS.values():
-                        if alt not in _used_imgs:
-                            chosen = alt
-                            break
+                cache_key = (location or title, dest)
+                if cache_key not in _location_cache:
+                    _location_cache[cache_key] = get_location_image(location or title, dest, a.get("type", ""))
+                chosen = _location_cache[cache_key] or pick_cover(dest)
                 a["image_url"] = chosen
-                _used_imgs.add(a["image_url"])
+                a["image_source"] = _image_source(chosen)
     except Exception:
         # don't let image enrichment block itinerary creation
         pass
@@ -1409,7 +1382,7 @@ Return only valid JSON. Preserve the existing schema and day dates. Do not inven
 Existing itinerary:
 {json.dumps(itinerary, ensure_ascii=False)}"""
     refined = None
-    if os.environ.get("EMERGENT_LLM_KEY"):
+    if os.environ.get("ANTHROPIC_API_KEY"):
         try:
             refined = parse_itinerary_json(await asyncio.wait_for(call_llm(prompt), timeout=180))
         except Exception as error:
@@ -1927,7 +1900,10 @@ async def startup():
     await db.login_attempts.create_index("identifier")
     await db.trips.create_index([("user_id", 1), ("deleted_at", 1)])
     await db.trips.create_index("share_token")
+    await db.expenses.create_index("user_id")
     await db.expenses.create_index("trip_id")
+    await db.favorites.create_index("user_id")
+    await db.favorites.create_index([("user_id", 1), ("trip_id", 1)])
     await db.attractions.create_index("city")
     await seed_admin()
 

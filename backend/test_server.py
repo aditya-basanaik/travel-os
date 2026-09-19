@@ -2,7 +2,7 @@ import os
 import sys
 import unittest
 from datetime import timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 from pydantic import ValidationError
@@ -13,7 +13,7 @@ os.environ.setdefault("DB_NAME", "travel_os_test")
 os.environ.setdefault("JWT_SECRET", "unit-test-secret-with-32-plus-bytes")
 os.environ.setdefault("ADMIN_EMAIL", "admin@example.com")
 os.environ.setdefault("ADMIN_PASSWORD", "password-for-tests")
-os.environ.setdefault("EMERGENT_LLM_KEY", "test-key")
+os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
 os.environ.setdefault("GOOGLE_OAUTH_CLIENT_IDS", "")
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -198,6 +198,33 @@ class ServerUnitTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any("Sunrise viewpoint" in c for c in candidates))
         self.assertTrue(any("Paris" in c for c in candidates))
         self.assertTrue(any("Eiffel Tower" in c for c in candidates))
+
+    def test_landmark_image_prefers_wikipedia(self):
+        response = MagicMock(status_code=200)
+        response.json.return_value = {
+            "type": "standard",
+            "thumbnail": {"source": "https://upload.wikimedia.org/landmark.jpg"},
+        }
+        with patch.object(server.requests, "get", return_value=response) as wikipedia_get:
+            image = server.get_location_image("Eiffel Tower", "Paris", "culture")
+
+        self.assertEqual(image, "https://upload.wikimedia.org/landmark.jpg")
+        self.assertEqual(server._image_source(image), "wikipedia")
+        wikipedia_get.assert_called_once()
+        self.assertIn("User-Agent", wikipedia_get.call_args.kwargs["headers"])
+
+    def test_generic_activity_falls_through_to_unsplash_or_generic(self):
+        with patch.object(server, "get_activity_image", return_value="https://images.unsplash.com/activity.jpg") as unsplash:
+            image = server.get_location_image("Lunch break", "Paris", "food")
+
+        self.assertEqual(image, "https://images.unsplash.com/activity.jpg")
+        unsplash.assert_called_once_with("Lunch break Paris")
+
+    def test_nonsensical_location_still_returns_image(self):
+        with patch.object(server, "get_activity_image", return_value=server.COVERS["beach"]):
+            image = server.get_location_image("zzzxqv-not-a-real-place", "Paris", "activity")
+
+        self.assertTrue(image)
 
     async def test_owned_trip_returns_only_active_trip_for_current_user(self):
         original_trips = server.db.trips
@@ -744,7 +771,7 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
         )
         await server.db.trips.insert_one(trip.to_mongo())
 
-        with patch.dict(os.environ, {"EMERGENT_LLM_KEY": ""}):
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}):
             response = await self.client.post(
                 f"/api/trips/{trip.id}/refine",
                 json={"instruction": "Make it cheaper"},
@@ -760,7 +787,7 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(register.status_code, 200)
 
-        with patch.dict(os.environ, {"EMERGENT_LLM_KEY": ""}, clear=False):
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}, clear=False):
             with patch.object(server, "call_llm", new_callable=AsyncMock) as mock_call_llm:
                 response = await self.client.post(
                     "/api/trips/plan",
@@ -782,6 +809,34 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("days", payload["itinerary"])
         self.assertGreater(len(payload["itinerary"]["days"]), 0)
         self.assertIn("attractions", payload["itinerary"])
+        self.assertFalse(payload["itinerary"]["ai_generated"])
+
+    async def test_plan_trip_marks_llm_failure_as_fallback(self):
+        register = await self.client.post(
+            "/api/auth/register",
+            json={"name": "Planner Failure", "email": "planner-failure@example.com", "password": "password123"},
+        )
+        self.assertEqual(register.status_code, 200)
+
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}, clear=False):
+            with patch.object(server, "call_llm", new_callable=AsyncMock) as mock_call_llm:
+                mock_call_llm.side_effect = RuntimeError("Anthropic request failed")
+                response = await self.client.post(
+                    "/api/trips/plan",
+                    json={
+                        "destination": "Goa",
+                        "start_date": "2026-09-01",
+                        "end_date": "2026-09-01",
+                        "budget": 12000,
+                        "currency": "₹",
+                        "people_count": 2,
+                        "interests": ["nature"],
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_call_llm.await_count, 2)
+        self.assertFalse(response.json()["itinerary"]["ai_generated"])
 
     async def test_natural_plan_endpoint_reuses_structured_planner(self):
         register = await self.client.post(
@@ -790,7 +845,7 @@ class AuthHttpTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(register.status_code, 200)
 
-        with patch.dict(os.environ, {"EMERGENT_LLM_KEY": ""}, clear=False), patch.object(
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}, clear=False), patch.object(
             server, "get_activity_image", return_value="https://example.com/activity.jpg"
         ):
             response = await self.client.post(
@@ -951,7 +1006,7 @@ class PhaseOneJourneyHttpTests(unittest.IsolatedAsyncioTestCase):
         self.client.cookies.set("access_token", refreshed.json()["access_token"])
         self.client.cookies.set("refresh_token", rotated_refresh)
 
-        with patch.dict(os.environ, {"EMERGENT_LLM_KEY": ""}, clear=False), patch.object(
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}, clear=False), patch.object(
             server, "call_llm", new_callable=AsyncMock
         ) as llm:
             planned = await self.client.post(

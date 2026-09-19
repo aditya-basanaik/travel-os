@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import { ForkKnife, Bed, Car, Compass, Mountains, Martini, Bank, Island, Parachute, MapPin, PencilSimple, Check, Plus, X, Sparkle, Trash } from "@phosphor-icons/react";
 import api, { fmtErr } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { COVER_BEACH } from "@/lib/images";
 
 export const TYPE_ICONS = {
   food: ForkKnife, stay: Bed, transport: Car, activity: Compass,
@@ -24,6 +23,20 @@ export const TYPE_COLORS = {
 };
 
 export const mapsUrl = (q) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+
+function ActivityImage({ activity }) {
+  const [failed, setFailed] = useState(false);
+  const isGeneric = activity.image_source === "generic";
+  if (failed || !activity.image_url) {
+    return <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center text-[10px] text-muted-foreground shrink-0">No image</div>;
+  }
+  return (
+    <div className="relative w-20 h-20 shrink-0">
+      <img src={activity.image_url} alt={activity.title || "Activity"} onError={() => setFailed(true)} className="w-full h-full rounded-lg object-cover" />
+      {isGeneric && <span className="absolute bottom-1 left-1 right-1 rounded bg-black/60 px-1 py-0.5 text-center text-[9px] text-white">Representative image</span>}
+    </div>
+  );
+}
 
 const fmtDate = (d) => {
   try { return new Date(d + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); }
@@ -116,6 +129,11 @@ export default function ItineraryTab({ trip, onUpdate }) {
 
   return (
     <div data-testid="itinerary-tab">
+      {it.ai_generated === false && (
+        <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-900" role="alert" data-testid="placeholder-itinerary-banner">
+          This itinerary is a basic placeholder - AI planning is temporarily unavailable.
+        </div>
+      )}
       {it.summary && <p className="text-muted-foreground mb-6 max-w-2xl">{it.summary}</p>}
 
       {Object.keys(cb).length > 0 && (
@@ -210,7 +228,7 @@ export default function ItineraryTab({ trip, onUpdate }) {
                     ) : (
                       <div className="flex gap-4">
                         <span className="text-xs font-bold text-muted-foreground w-12 shrink-0 pt-0.5">{act.time}</span>
-                        <img src={act.image_url || COVER_BEACH} alt={act.title} className="w-20 h-20 rounded-lg object-cover shrink-0" />
+                        <ActivityImage activity={act} />
                         <div className="flex-1 min-w-0">
                           <p className="font-heading font-bold">{act.title}</p>
                           {act.description && <p className="text-sm text-muted-foreground mt-1" style={{display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>{act.description}</p>}

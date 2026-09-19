@@ -102,7 +102,8 @@ export default function ExpensesTab({ trip }) {
     } catch (e) { toast.error(fmtErr(e)); }
   };
 
-  const spent = summary?.spent || 0;
+  const pendingSpent = queue.reduce((total, item) => total + Number(item.amount || 0), 0);
+  const spent = Number(summary?.spent || 0) + pendingSpent;
   const budget = summary?.budget || trip.budget;
   const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
   const over = spent > budget;
@@ -138,7 +139,9 @@ export default function ExpensesTab({ trip }) {
         <Progress value={pct} className="h-3 bg-secondary [&>div]:bg-primary" />
         <div className="mt-5 space-y-2.5" data-testid="category-breakdown">
           {CATEGORIES.map(({ key, label, icon: Icon }) => {
-            const amt = summary?.by_category?.[key] || 0;
+            const confirmed = summary?.by_category?.[key] || 0;
+            const pending = queue.reduce((total, item) => total + (item.category === key ? Number(item.amount || 0) : 0), 0);
+            const amt = confirmed + pending;
             const w = spent > 0 ? (amt / spent) * 100 : 0;
             return (
               <div key={key} className="flex items-center gap-3">
@@ -180,7 +183,7 @@ export default function ExpensesTab({ trip }) {
         {queue.map((q, i) => (
           <div key={`q-${i}`} className="flex items-center gap-4 bg-accent/5 border border-accent/20 rounded-3xl px-5 py-4" data-testid={`expense-queued-${i}`}>
             <span className="flex-1 text-sm"><span className="font-bold capitalize">{q.category}</span>{q.note ? ` · ${q.note}` : ""}</span>
-            <span className="text-xs font-bold text-accent uppercase tracking-wider">Offline</span>
+            <span className="text-xs font-bold text-accent uppercase tracking-wider">Pending sync</span>
             <span className="font-heading font-bold">{trip.currency}{Number(q.amount).toLocaleString()}</span>
           </div>
         ))}

@@ -134,7 +134,20 @@ class ExpensesRepository extends ChangeNotifier {
     try {
       final response = await _dio.get('/trips/$tripId/expenses/summary');
       if (response.statusCode == 200) {
-        return ExpenseSummary.fromJson(response.data);
+        final summary = ExpenseSummary.fromJson(response.data);
+        final pending = (await _loadOfflineQueue()).where((expense) => expense.tripId == tripId);
+        final pendingSpent = pending.fold<double>(0, (total, expense) => total + expense.amount);
+        final byCategory = Map<String, double>.from(summary.byCategory);
+        for (final expense in pending) {
+          byCategory[expense.category] = (byCategory[expense.category] ?? 0) + expense.amount;
+        }
+        return ExpenseSummary(
+          budget: summary.budget,
+          currency: summary.currency,
+          spent: summary.spent + pendingSpent,
+          remaining: summary.remaining - pendingSpent,
+          byCategory: byCategory,
+        );
       }
     } catch (e) {
       debugPrint('Error getting expense summary: $e');

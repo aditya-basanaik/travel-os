@@ -319,7 +319,27 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen>
       itemCount: days.length + 1,
       itemBuilder: (context, dIdx) {
         if (dIdx == 0) {
-          return _buildItineraryControls(trip);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (trip.itinerary?['ai_generated'] == false)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF4D6),
+                    border: Border.all(color: const Color(0xFFE7B94C)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Text(
+                    'This itinerary is a basic placeholder - AI planning is temporarily unavailable.',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              _buildItineraryControls(trip),
+            ],
+          );
         }
         final dayIndex = dIdx - 1;
         final day = days[dayIndex];
@@ -681,6 +701,15 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen>
     );
   }
 
+  Widget _buildImagePlaceholder() {
+    return Container(
+      color: const Color(0xFFF1EEE8),
+      alignment: Alignment.center,
+      child: const Icon(Icons.image_not_supported_outlined,
+          color: AppTheme.mutedText),
+    );
+  }
+
   Widget _buildActivityTimelineRow(
       Map<String, dynamic> act, int dayIndex, int activityIndex) {
     IconData getIcon(String? type) {
@@ -800,21 +829,43 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen>
                         ],
                       ),
                       const SizedBox(height: 8),
-                      if (act['image_url'] != null &&
-                          act['image_url'].toString().trim().isNotEmpty) ...[
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            act['image_url'],
-                            width: double.infinity,
-                            height: 140,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const SizedBox.shrink(),
-                          ),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 140,
+                          child: (act['image_url'] != null &&
+                                  act['image_url'].toString().trim().isNotEmpty)
+                              ? Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    Image.network(
+                                      act['image_url'],
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) =>
+                                          _buildImagePlaceholder(),
+                                    ),
+                                    if (act['image_source'] == 'generic')
+                                      const Positioned(
+                                        left: 8,
+                                        right: 8,
+                                        bottom: 8,
+                                        child: Text(
+                                          'Representative image',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 10,
+                                            backgroundColor: Colors.black54,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                )
+                              : _buildImagePlaceholder(),
                         ),
+                      ),
                         const SizedBox(height: 8),
-                      ],
                       Text(
                         act['description'] ?? '',
                         style: GoogleFonts.dmSans(
